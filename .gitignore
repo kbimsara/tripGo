@@ -92,3 +92,30 @@ mongo-data/
 .tmp/
 tmp/
 temp/
+
+# ── Ollama (in case any model files end up in repo) ─────────────────────
+*.gguf
+*.ggml
+*.bin
+ollama-data/
+
+# ── User-uploaded images (if stored locally) ────────────────────────────
+public/uploads/
+
+# ── Storybook ────────────────────────────────────────────────────────────
+storybook-static/
+
+# ── Sentry ───────────────────────────────────────────────────────────────
+.sentryclirc
+
+# ── Playwright / Cypress test artifacts ─────────────────────────────────
+/test-results/
+/playwright-report/
+/playwright/.cache/
+cypress/videos/
+cypress/screenshots/
+
+# ── Misc backup files ────────────────────────────────────────────────────
+*.bak
+*.orig
+*~
