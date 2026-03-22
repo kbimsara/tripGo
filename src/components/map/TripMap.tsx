@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Trip, Day, Place } from "@/types";
 import {
   Navigation, Route, Clock, MapPin, ExternalLink,
-  ChevronDown, ChevronUp, Car, Loader2,
+  ChevronDown, ChevronUp, Car, Footprints, Bike, Loader2,
 } from "lucide-react";
 
 interface TripMapProps {
@@ -36,9 +36,17 @@ interface RouteSegment {
   coords: [number, number][]; // [lat, lng]
 }
 
+// OSRM profile → API path segment
+const OSRM_PROFILE: Record<string, string> = {
+  driving: "driving",
+  walking: "foot",
+  cycling: "bike",
+};
+
 async function fetchRoadRoute(
   from: Place,
-  to: Place
+  to: Place,
+  mode: "driving" | "walking" | "cycling" = "driving"
 ): Promise<RouteSegment | null> {
   if (!from.coordinates?.length || !to.coordinates?.length) return null;
   const [fLat, fLng] = from.coordinates;
@@ -46,8 +54,9 @@ async function fetchRoadRoute(
 
   try {
     // OSRM public demo server — 100% free, OpenStreetMap-based
+    const profile = OSRM_PROFILE[mode] ?? "driving";
     const url =
-      `https://router.project-osrm.org/route/v1/driving/` +
+      `https://router.project-osrm.org/route/v1/${profile}/` +
       `${fLng},${fLat};${tLng},${tLat}` +
       `?geometries=geojson&overview=full&steps=false`;
 
@@ -111,7 +120,7 @@ export default function TripMap({ trip, selectedDay, onPlaceSelect, className = 
   const [routeSegments, setRouteSegments] = useState<RouteSegment[]>([]);
   const [routeLoading, setRouteLoading]   = useState(false);
   const [panelOpen, setPanelOpen]         = useState(true);
-  const [routeMode, setRouteMode]         = useState<"road" | "straight">("road");
+  const [routeMode, setRouteMode]         = useState<"driving" | "walking" | "cycling" | "straight">("driving");
 
   useEffect(() => { setIsClient(true); }, []);
 
@@ -286,9 +295,9 @@ export default function TripMap({ trip, selectedDay, onPlaceSelect, className = 
           const fromPlace = places[i];
           const toPlace   = places[i + 1];
 
-          if (routeMode === "road") {
+          if (routeMode !== "straight") {
             setRouteLoading(true);
-            const seg = await fetchRoadRoute(fromPlace, toPlace);
+            const seg = await fetchRoadRoute(fromPlace, toPlace, routeMode);
             if (seg) {
               newSegments.push(seg);
               // Draw road polyline
@@ -315,7 +324,7 @@ export default function TripMap({ trip, selectedDay, onPlaceSelect, className = 
                       padding:2px 8px;font-size:10px;font-weight:600;
                       color:${color};white-space:nowrap;
                       box-shadow:0 2px 8px rgba(0,0,0,.5);
-                    ">🚗 ${seg.distanceKm} km · ${formatDuration(seg.durationMin)}</div>`,
+                    ">${routeMode === "walking" ? "🚶" : routeMode === "cycling" ? "🚴" : "🚗"} ${seg.distanceKm} km · ${formatDuration(seg.durationMin)}</div>`,
                 }),
                 interactive: false,
                 zIndexOffset: -100,
@@ -384,26 +393,33 @@ export default function TripMap({ trip, selectedDay, onPlaceSelect, className = 
       <div ref={mapRef} className="w-full flex-1 z-0 min-h-0" />
 
       {/* ── Route mode toggle (top-left) ──────────────────────────── */}
-      <div className="absolute left-3 top-3 z-10 flex gap-1.5">
-        {(["road", "straight"] as const).map((mode) => (
+      <div className="absolute left-3 top-3 z-10 flex items-center gap-1">
+        {(
+          [
+            { mode: "driving",  label: "Drive",  icon: <Car           className="h-3 w-3" /> },
+            { mode: "walking",  label: "Walk",   icon: <Footprints    className="h-3 w-3" /> },
+            { mode: "cycling",  label: "Cycle",  icon: <Bike          className="h-3 w-3" /> },
+            { mode: "straight", label: "Direct", icon: <Route         className="h-3 w-3" /> },
+          ] as const
+        ).map(({ mode, label, icon }) => (
           <button
             key={mode}
             onClick={() => setRouteMode(mode)}
-            title={mode === "road" ? "Show real road route" : "Straight-line route"}
-            className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium shadow transition-all ${
+            title={`${label} routing`}
+            className={`flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium shadow transition-all ${
               routeMode === mode
-                ? "bg-blue-600 text-white"
+                ? "bg-blue-600 text-white shadow-lg shadow-blue-500/30"
                 : "glass border border-white/10 text-slate-400 hover:text-white"
             }`}
           >
-            {mode === "road" ? <Car className="h-3 w-3" /> : <Route className="h-3 w-3" />}
-            {mode === "road" ? "Road" : "Direct"}
+            {icon}
+            <span className="hidden sm:inline">{label}</span>
           </button>
         ))}
         {routeLoading && (
           <div className="flex items-center gap-1 rounded-lg glass border border-white/10 px-2.5 py-1.5 text-xs text-blue-400">
             <Loader2 className="h-3 w-3 animate-spin" />
-            Routing…
+            <span className="hidden sm:inline">Routing…</span>
           </div>
         )}
       </div>
