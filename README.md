@@ -1,16 +1,16 @@
-<![CDATA[<div align="center">
-
-<img src="https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js" />
-<img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript" />
-<img src="https://img.shields.io/badge/MongoDB-9-47A248?style=for-the-badge&logo=mongodb" />
-<img src="https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=for-the-badge&logo=tailwindcss" />
-<img src="https://img.shields.io/badge/OpenStreetMap-Free_Maps-7EBC6F?style=for-the-badge&logo=openstreetmap" />
-
 # 🧭 TripGo — AI-Powered Trip Planner
+
+<div align="center">
+
+![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript)
+![MongoDB](https://img.shields.io/badge/MongoDB-9-47A248?style=for-the-badge&logo=mongodb)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=for-the-badge&logo=tailwindcss)
+![OpenStreetMap](https://img.shields.io/badge/OpenStreetMap-Free_Maps-7EBC6F?style=for-the-badge&logo=openstreetmap)
 
 **Plan the perfect trip with AI. Visualize on a live map. Share with the world.**
 
-[Features](#-features) · [Tech Stack](#-tech-stack) · [Getting Started](#-getting-started) · [Local LLM](#-run-with-local-llm-ollama) · [Project Structure](#-project-structure) · [Screenshots](#-screenshots)
+[Features](#-features) · [Tech Stack](#-tech-stack) · [Getting Started](#-getting-started) · [Local LLM](#-run-with-local-llm-ollama) · [Project Structure](#-project-structure)
 
 </div>
 
@@ -20,9 +20,10 @@
 
 | Feature | Description |
 |---|---|
-| 🤖 **AI Trip Designer** | Claude AI (or local LLM via Ollama) generates complete day-by-day itineraries with GPS coordinates, viewpoints, restaurants, and travel tips |
-| 🗺️ **Interactive Map** | Live OpenStreetMap-powered map with real **road routing** via OSRM (free, no API key) |
-| 🚗 **Turn-by-Turn Directions** | Real road paths between stops with distance & drive time labels. One-click to open in Google Maps |
+| 🤖 **AI Trip Designer** | Claude AI or local LLM (Ollama) generates complete day-by-day itineraries with GPS coordinates, viewpoints, restaurants, and travel tips |
+| 🗺️ **Interactive Map** | Live OpenStreetMap map with real **road routing** via OSRM — free, no API key |
+| 🚗 **Turn-by-Turn Directions** | Actual road paths between stops with distance and drive-time labels. One-click to open in Google Maps |
+| 📍 **Accurate Locations** | All AI-generated place coordinates are verified and corrected via **Nominatim geocoding** (OSM) |
 | 💬 **Chat to Customize** | Refine your itinerary through natural conversation — swap places, change routes, add viewpoints |
 | 💾 **Save & Account** | Trips saved to MongoDB under your account. Choose public or private per trip |
 | 🌍 **Community Explore** | Browse public trips, save to your account, clone and customize any trip |
@@ -35,23 +36,25 @@
 ### Frontend
 - **Next.js 15** (App Router) + **React 19**
 - **TypeScript 5**
-- **Tailwind CSS v4** — utility-first styling
+- **Tailwind CSS v4**
 - **Framer Motion** — animations
-- **Leaflet** + **OpenStreetMap** — 100% free interactive maps
+- **Leaflet + OpenStreetMap** — 100% free interactive maps
 - **OSRM** — free open-source road routing engine
 
 ### Backend
 - **Next.js API Routes** — serverless API
-- **MongoDB** + **Mongoose** — database & ODM
+- **MongoDB + Mongoose** — database
 - **NextAuth v5** — authentication
-- **Anthropic Claude API** — AI trip generation & chat
-- **Ollama** (optional) — run any LLM locally for free
+- **Anthropic Claude API** — AI trip generation and chat
+- **Ollama** *(optional)* — run any LLM locally for free
 
 ### Free Services Used
+
 | Service | Purpose | Cost |
 |---|---|---|
-| OpenStreetMap | Map tiles | Free forever |
+| OpenStreetMap | Map tiles (via CartoDB dark) | Free forever |
 | OSRM | Road routing between places | Free forever |
+| Nominatim | Geocoding — place name to real GPS | Free forever |
 | MongoDB Atlas | Database (free tier) | Free |
 | Ollama | Local LLM inference | Free |
 
@@ -63,7 +66,7 @@
 
 - Node.js 18+
 - MongoDB (local or [Atlas free tier](https://www.mongodb.com/atlas))
-- An [Anthropic API key](https://console.anthropic.com) **OR** Ollama (local LLM — see below)
+- An [Anthropic API key](https://console.anthropic.com) **OR** Ollama for local AI (see below)
 
 ### 1. Clone & Install
 
@@ -78,25 +81,26 @@ npm install
 Create a `.env.local` file in the project root:
 
 ```env
-# ── Database ────────────────────────────────────────────────────────────
+# ── Database ────────────────────────────────────────────
 MONGODB_URI=mongodb://localhost:27017/tripgo
-# or Atlas:
+# Atlas example:
 # MONGODB_URI=mongodb+srv://<user>:<password>@cluster.mongodb.net/tripgo
 
-# ── Auth ────────────────────────────────────────────────────────────────
-NEXTAUTH_SECRET=your-random-secret-at-least-32-chars
+# ── Auth ─────────────────────────────────────────────────
+NEXTAUTH_SECRET=your-random-secret-minimum-32-characters
 NEXTAUTH_URL=http://localhost:3000
 
-# ── AI (choose one) ─────────────────────────────────────────────────────
-# Option A — Anthropic Claude (cloud)
+# ── AI — choose ONE option ───────────────────────────────
+
+# Option A: Anthropic Claude (cloud)
 ANTHROPIC_API_KEY=sk-ant-...
 
-# Option B — Ollama (local, free) — see section below
+# Option B: Ollama (local, completely free)
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=qwen2.5:7b
 ```
 
-### 3. Run Development Server
+### 3. Run the Dev Server
 
 ```bash
 npm run dev
@@ -114,34 +118,33 @@ Open [http://localhost:3000](http://localhost:3000) 🎉
 
 ## 🦙 Run with Local LLM (Ollama)
 
-Run the AI **completely free and offline** using Ollama.
+Run the AI **completely free and offline** using Ollama — no API key needed.
 
 ### Install Ollama
 
-Download from **[ollama.com/download](https://ollama.com/download)** (Windows/Mac/Linux)
+Download from **[ollama.com/download](https://ollama.com/download)**
 
-### Choose a Model (based on your hardware)
+### Choose a Model
 
-| Model | VRAM | Speed | Best For |
+| Model | VRAM Needed | Speed | Recommendation |
 |---|---|---|---|
-| `qwen2.5:3b` | ~2 GB | Very fast | Low-end GPUs, quick testing |
-| `qwen2.5:7b` ⭐ | ~5 GB | Fast (GPU) | **Recommended — best balance** |
-| `llama3.1:8b` | ~5 GB | Fast (GPU) | Alternative to qwen2.5:7b |
-| `qwen2.5:14b` | ~9 GB | Medium | High quality, needs 12GB+ VRAM |
+| `qwen2.5:3b` | ~2 GB | Very fast | Low-end GPUs / quick testing |
+| `qwen2.5:7b` ⭐ | ~5 GB | Fast (GPU) | **Best balance — recommended** |
+| `llama3.1:8b` | ~5 GB | Fast (GPU) | Great alternative |
+| `qwen2.5:14b` | ~9 GB | Medium | Higher quality, needs 12 GB+ VRAM |
 
-> **Your Specs (Legion 5, i7-13650HX, 32GB RAM, 8GB VRAM):**
-> → Use `qwen2.5:7b` — fits fully in VRAM, fast GPU inference ✅
+> **Legion 5 · i7-13650HX · 32 GB RAM · 8 GB VRAM** → use `qwen2.5:7b` (fits fully in VRAM ✅)
 
-### Setup Commands
+### Setup
 
 ```bash
-# Pull your chosen model (one-time download)
+# Download the model (one-time, ~4.7 GB)
 ollama pull qwen2.5:7b
 
-# Verify it's running
+# Verify Ollama is running
 curl http://localhost:11434/api/tags
 
-# Test it
+# Quick test
 ollama run qwen2.5:7b "Say hello"
 ```
 
@@ -150,8 +153,46 @@ Then set in `.env.local`:
 ```env
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=qwen2.5:7b
-# Leave ANTHROPIC_API_KEY unset to use Ollama
 ```
+
+---
+
+## 🗺️ Map & Routing
+
+TripGo uses **100% free** mapping services — no API keys required.
+
+| Service | Endpoint | Purpose |
+|---|---|---|
+| **CartoDB** | `basemaps.cartocdn.com/dark_all` | Dark map tiles |
+| **OSRM** | `router.project-osrm.org` | Real road routing |
+| **Nominatim** | `nominatim.openstreetmap.org` | Place name → GPS coordinates |
+
+### How Road Routing Works
+
+```
+Place A ──► OSRM API ──► Real road geometry ──► Leaflet polyline ──► Place B
+                               │
+                   Distance label (km + drive time)
+                   "Open in Google Maps" button
+```
+
+### Why Geocoding is Important
+
+Local LLMs often **hallucinate GPS coordinates** (e.g., putting Paris in the wrong country).
+TripGo automatically fixes this: after the LLM generates the itinerary, every place name is
+**geocoded via Nominatim** to get the real coordinates before saving to the database.
+
+```
+LLM output (wrong coords) ──► Nominatim geocode ──► Real GPS ──► Map shows correct location
+```
+
+Map features:
+- ✅ Real road paths (not straight lines)
+- ✅ Distance in km + estimated drive time per segment
+- ✅ Route summary panel with total distance and time
+- ✅ Multi-stop Google Maps link for the full day
+- ✅ Per-segment "Navigate" buttons
+- ✅ Graceful fallback to dashed lines if OSRM is unavailable
 
 ---
 
@@ -162,92 +203,62 @@ tripGo/
 ├── src/
 │   ├── app/
 │   │   ├── (auth)/
-│   │   │   ├── login/page.tsx          # Sign-in page
-│   │   │   └── register/page.tsx       # Registration page
+│   │   │   ├── login/page.tsx           # Sign-in page
+│   │   │   └── register/page.tsx        # Registration page
 │   │   ├── api/
 │   │   │   ├── ai/
-│   │   │   │   ├── chat/route.ts       # AI chat customization endpoint
-│   │   │   │   └── generate/route.ts   # AI trip generation endpoint
+│   │   │   │   ├── chat/route.ts        # AI chat customization
+│   │   │   │   └── generate/route.ts    # AI trip generation
 │   │   │   ├── auth/
-│   │   │   │   ├── [...nextauth]/      # NextAuth handler
-│   │   │   │   └── register/route.ts  # User registration
+│   │   │   │   ├── [...nextauth]/       # NextAuth handler
+│   │   │   │   └── register/route.ts   # User registration
 │   │   │   └── trips/
-│   │   │       ├── route.ts            # Create / list user trips
-│   │   │       ├── public/route.ts     # Public trips feed
+│   │   │       ├── route.ts             # Create / list user trips
+│   │   │       ├── public/route.ts      # Public community trips
 │   │   │       └── [id]/
-│   │   │           ├── route.ts        # Get / update / delete trip
-│   │   │           └── save/route.ts   # Save trip to account
-│   │   ├── dashboard/page.tsx          # User dashboard
-│   │   ├── explore/page.tsx            # Community trips explorer
+│   │   │           ├── route.ts         # Get / update / delete
+│   │   │           └── save/route.ts    # Save trip to account
+│   │   ├── dashboard/page.tsx           # User dashboard
+│   │   ├── explore/page.tsx             # Community trips explorer
 │   │   ├── trip/
-│   │   │   ├── new/page.tsx            # AI trip creation form
-│   │   │   └── [id]/page.tsx          # Trip detail + map + chat
-│   │   ├── globals.css                 # Global styles + Tailwind v4 theme
-│   │   ├── layout.tsx                  # Root layout
-│   │   └── page.tsx                    # Landing page
+│   │   │   ├── new/page.tsx             # AI trip creation form
+│   │   │   └── [id]/page.tsx           # Trip detail + map + chat
+│   │   ├── globals.css                  # Tailwind v4 theme + global styles
+│   │   ├── layout.tsx                   # Root layout
+│   │   └── page.tsx                     # Landing page
 │   ├── components/
-│   │   ├── chat/ChatPanel.tsx          # AI chat customization panel
-│   │   ├── map/TripMap.tsx             # Leaflet map + OSRM road routing
-│   │   ├── trip/TripCard.tsx           # Trip card component
+│   │   ├── chat/ChatPanel.tsx           # AI chat panel
+│   │   ├── map/TripMap.tsx              # Leaflet map + OSRM routing
+│   │   ├── trip/TripCard.tsx            # Trip card component
 │   │   └── ui/
 │   │       ├── Button.tsx
 │   │       ├── Input.tsx
 │   │       └── Navbar.tsx
 │   ├── lib/
-│   │   ├── ai/tripAI.ts               # AI generation & chat logic
-│   │   ├── auth.ts                    # NextAuth config
-│   │   ├── db/mongoose.ts             # MongoDB connection
-│   │   └── utils.ts                   # Helpers
-│   ├── middleware.ts                   # Auth route protection
+│   │   ├── ai/tripAI.ts                # LLM generation + Nominatim geocoding
+│   │   ├── auth.ts                     # NextAuth config
+│   │   ├── db/mongoose.ts              # MongoDB connection
+│   │   └── utils.ts                    # Shared helpers
+│   ├── middleware.ts                    # Route protection
 │   ├── models/
-│   │   ├── Trip.ts                    # Trip Mongoose model
-│   │   └── User.ts                    # User Mongoose model
+│   │   ├── Trip.ts                     # Trip schema
+│   │   └── User.ts                     # User schema
 │   └── types/
-│       ├── index.ts                   # Shared TypeScript types
-│       └── next-auth.d.ts             # NextAuth type extensions
-├── .env.local                         # ← Create this (not committed)
+│       ├── index.ts                    # Shared TypeScript types
+│       └── next-auth.d.ts              # NextAuth type extensions
+├── .env.local                          # ← Create this (never committed)
 ├── .gitignore
 ├── next.config.ts
 ├── package.json
-├── postcss.config.mjs
 └── tsconfig.json
 ```
 
 ---
 
-## 🗺️ Map & Routing
-
-TripGo uses **100% free** mapping services:
-
-| Service | URL | Usage |
-|---|---|---|
-| **OpenStreetMap** | `tile.openstreetmap.org` | Map tiles (dark theme via CartoDB) |
-| **OSRM** | `router.project-osrm.org` | Real road routing between places |
-| **Nominatim** | `nominatim.openstreetmap.org` | Geocoding (place name → coordinates) |
-
-### How Road Routing Works
-
-```
-Place A ──► OSRM API ──► Real road geometry ──► Leaflet polyline ──► Place B
-                                ↓
-                    Distance label (km + drive time)
-                    "Open in Google Maps" button
-```
-
-Features:
-- ✅ Actual road path (not straight lines)
-- ✅ Distance in km + estimated drive time per segment
-- ✅ Route summary panel (total km, total drive time)
-- ✅ "Open in Maps" → full multi-stop Google Maps URL
-- ✅ Per-segment "Navigate" buttons
-- ✅ Falls back to dashed straight line if OSRM is unavailable
-
----
-
-## 🔧 Available Scripts
+## 🔧 Scripts
 
 ```bash
-npm run dev      # Start development server (localhost:3000)
+npm run dev      # Development server on localhost:3000
 npm run build    # Production build
 npm run start    # Start production server
 npm run lint     # ESLint check
@@ -255,34 +266,21 @@ npm run lint     # ESLint check
 
 ---
 
-## 🌐 Deployment
-
-### Vercel (Recommended)
+## 🌐 Deployment (Vercel)
 
 ```bash
 npm i -g vercel
 vercel
 ```
 
-Set all environment variables in the Vercel dashboard under **Settings → Environment Variables**.
-
-### Environment Variables for Production
+Set these environment variables in the Vercel dashboard under **Settings → Environment Variables**:
 
 ```env
 MONGODB_URI=mongodb+srv://...
 NEXTAUTH_SECRET=<32+ char random string>
-NEXTAUTH_URL=https://your-domain.com
+NEXTAUTH_URL=https://your-domain.vercel.app
 ANTHROPIC_API_KEY=sk-ant-...
 ```
-
----
-
-## 🤝 Contributing
-
-1. Fork the repo
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Commit your changes: `git commit -m 'feat: add my feature'`
-4. Push and open a Pull Request
 
 ---
 
@@ -294,9 +292,8 @@ ISC License — see [LICENSE](LICENSE) for details.
 
 <div align="center">
 
-Built with ❤️ using **Next.js**, **Claude AI**, **OpenStreetMap** & **OSRM**
+Built with ❤️ using **Next.js · Claude AI · OpenStreetMap · OSRM · Nominatim**
 
 **[⭐ Star this repo](https://github.com/kbimsara/tripGo)** if you found it helpful!
 
 </div>
-]]>
