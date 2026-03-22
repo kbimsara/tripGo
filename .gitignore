@@ -1,34 +1,94 @@
-# dependencies
-/node_modules
-/.pnp
+# ── Dependencies ────────────────────────────────────────────────────────
+node_modules/
+.pnp
 .pnp.js
+.yarn/install-state.gz
 
-# testing
+# ── Next.js build output ────────────────────────────────────────────────
+.next/
+out/
+build/
+dist/
+
+# ── Environment & secrets (NEVER commit these) ──────────────────────────
+.env
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+
+# ── Testing & coverage ──────────────────────────────────────────────────
 /coverage
+.nyc_output
 
-# next.js
-/.next/
-/out/
+# ── TypeScript ──────────────────────────────────────────────────────────
+*.tsbuildinfo
+next-env.d.ts
 
-# production
-/build
-
-# misc
+# ── OS generated ────────────────────────────────────────────────────────
 .DS_Store
-*.pem
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
 
-# debug
+# ── Logs ────────────────────────────────────────────────────────────────
+logs/
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# local env files
-.env*.local
+# ── Editor / IDE ────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
-# vercel
+# ── Package manager locks (keep only one) ───────────────────────────────
+# Uncomment the ones you DON'T use:
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# ── Vercel ──────────────────────────────────────────────────────────────
 .vercel
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+# ── Misc certs & keys ───────────────────────────────────────────────────
+*.pem
+*.key
+*.crt
+*.p12
+
+# ── Debug / profiling ───────────────────────────────────────────────────
+.clinic/
+.0x/
+*.cpuprofile
+*.heapsnapshot
+
+# ── Local DB data (if running MongoDB locally with data dir) ────────────
+data/db/
+mongo-data/
+
+# ── Claude Code settings ────────────────────────────────────────────────
 .claude/settings.local.json
+
+# ── Temp / cache ────────────────────────────────────────────────────────
+.cache/
+.temp/
+.tmp/
+tmp/
+temp/
