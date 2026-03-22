@@ -1,7 +1,10 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Trip, Day, Place } from "@/types";
-import { MapPin, Navigation, Eye, Coffee, Hotel, Zap } from "lucide-react";
+import {
+  Navigation, Route, Clock, MapPin, ExternalLink,
+  ChevronDown, ChevronUp, Car, Loader2,
+} from "lucide-react";
 
 interface TripMapProps {
   trip: Partial<Trip>;
@@ -10,16 +13,10 @@ interface TripMapProps {
   className?: string;
 }
 
-// Color palette per day
+// ── Per-day colour palette ────────────────────────────────────────────
 const DAY_COLORS = [
-  "#3b82f6", // blue
-  "#8b5cf6", // purple
-  "#10b981", // emerald
-  "#f59e0b", // amber
-  "#ef4444", // red
-  "#06b6d4", // cyan
-  "#ec4899", // pink
-  "#84cc16", // lime
+  "#3b82f6", "#8b5cf6", "#10b981", "#f59e0b",
+  "#ef4444", "#06b6d4", "#ec4899", "#84cc16",
 ];
 
 const PLACE_ICONS: Record<Place["type"], string> = {
@@ -30,319 +27,531 @@ const PLACE_ICONS: Record<Place["type"], string> = {
   activity: "⚡",
 };
 
-export default function TripMap({
-  trip,
-  selectedDay,
-  onPlaceSelect,
-  className = "",
-}: TripMapProps) {
-  const mapRef = useRef<HTMLDivElement>(null);
-  const leafletMapRef = useRef<L.Map | null>(null);
-  const markersRef = useRef<L.LayerGroup | null>(null);
-  const routeLinesRef = useRef<L.LayerGroup | null>(null);
-  const [isClient, setIsClient] = useState(false);
+// ── OSRM road-routing (free, no API key) ─────────────────────────────
+interface RouteSegment {
+  from: Place;
+  to: Place;
+  distanceKm: number;
+  durationMin: number;
+  coords: [number, number][]; // [lat, lng]
+}
+
+async function fetchRoadRoute(
+  from: Place,
+  to: Place
+): Promise<RouteSegment | null> {
+  if (!from.coordinates?.length || !to.coordinates?.length) return null;
+  const [fLat, fLng] = from.coordinates;
+  const [tLat, tLng] = to.coordinates;
+
+  try {
+    // OSRM public demo server — 100% free, OpenStreetMap-based
+    const url =
+      `https://router.project-osrm.org/route/v1/driving/` +
+      `${fLng},${fLat};${tLng},${tLat}` +
+      `?geometries=geojson&overview=full&steps=false`;
+
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const data = await res.json();
+
+    if (data.code !== "Ok" || !data.routes?.length) return null;
+
+    const route = data.routes[0];
+    // GeoJSON coords are [lng, lat] → flip to [lat, lng] for Leaflet
+    const coords: [number, number][] = (
+      route.geometry.coordinates as [number, number][]
+    ).map(([lng, lat]) => [lat, lng]);
+
+    return {
+      from,
+      to,
+      distanceKm: Math.round((route.distance / 1000) * 10) / 10,
+      durationMin: Math.round(route.duration / 60),
+      coords,
+    };
+  } catch {
+    return null; // silent fallback handled by caller
+  }
+}
+
+function formatDuration(min: number): string {
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+function googleMapsNavUrl(from: Place, to: Place): string {
+  const [fLat, fLng] = from.coordinates;
+  const [tLat, tLng] = to.coordinates;
+  return `https://www.google.com/maps/dir/${fLat},${fLng}/${tLat},${tLng}`;
+}
+
+// ── Map loading skeleton ──────────────────────────────────────────────
+function MapSkeleton({ className }: { className?: string }) {
+  return (
+    <div className={`${className} flex flex-col items-center justify-center gap-3 rounded-2xl bg-slate-800`}>
+      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500/15">
+        <Navigation className="h-6 w-6 animate-spin text-blue-400" />
+      </div>
+      <p className="text-sm text-slate-400">Loading map…</p>
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────
+export default function TripMap({ trip, selectedDay, onPlaceSelect, className = "" }: TripMapProps) {
+  const mapRef       = useRef<HTMLDivElement>(null);
+  const leafletMap   = useRef<L.Map | null>(null);
+  const markerLayer  = useRef<L.LayerGroup | null>(null);
+  const routeLayer   = useRef<L.LayerGroup | null>(null);
+
+  const [isClient, setIsClient]       = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
+  const [routeSegments, setRouteSegments] = useState<RouteSegment[]>([]);
+  const [routeLoading, setRouteLoading]   = useState(false);
+  const [panelOpen, setPanelOpen]         = useState(true);
+  const [routeMode, setRouteMode]         = useState<"road" | "straight">("road");
 
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
+  useEffect(() => { setIsClient(true); }, []);
 
+  // ── Init Leaflet map (once) ─────────────────────────────────────────
   useEffect(() => {
     if (!isClient || !mapRef.current) return;
 
-    // Dynamically import Leaflet (SSR fix)
-    const initMap = async () => {
+    const init = async () => {
       const L = (await import("leaflet")).default;
-
-      // Fix default icon
       delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-        iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-        shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-      });
 
-      if (leafletMapRef.current) {
-        leafletMapRef.current.remove();
-      }
+      if (leafletMap.current) { leafletMap.current.remove(); }
 
       const map = L.map(mapRef.current!, {
-        center: [20, 0],
-        zoom: 3,
+        center: [20, 0], zoom: 3,
         zoomControl: false,
+        attributionControl: false,
       });
 
       L.control.zoom({ position: "bottomright" }).addTo(map);
+      L.control.attribution({ position: "bottomleft", prefix: false })
+        .addAttribution('© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>')
+        .addTo(map);
 
-      // OpenStreetMap tiles — 100% free, no API key
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution:
-          '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19,
-      }).addTo(map);
+      // CartoDB dark tiles (free, looks great)
+      L.tileLayer(
+        "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        { maxZoom: 19 }
+      ).addTo(map);
 
-      // Optional: CartoDB dark tiles (free)
-      // L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      //   attribution: '© OpenStreetMap contributors © CARTO',
-      //   maxZoom: 19,
-      // }).addTo(map);
-
-      markersRef.current = L.layerGroup().addTo(map);
-      routeLinesRef.current = L.layerGroup().addTo(map);
-      leafletMapRef.current = map;
+      markerLayer.current = L.layerGroup().addTo(map);
+      routeLayer.current  = L.layerGroup().addTo(map);
+      leafletMap.current  = map;
     };
 
-    initMap();
-
+    init();
     return () => {
-      if (leafletMapRef.current) {
-        leafletMapRef.current.remove();
-        leafletMapRef.current = null;
-      }
+      leafletMap.current?.remove();
+      leafletMap.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isClient]);
 
-  // Update markers and routes when trip or selectedDay changes
-  useEffect(() => {
-    if (!isClient || !leafletMapRef.current || !markersRef.current) return;
+  // ── Render markers & routes when trip/day changes ──────────────────
+  const renderMap = useCallback(async () => {
+    if (!isClient || !leafletMap.current || !markerLayer.current) return;
 
-    const updateMap = async () => {
-      const L = (await import("leaflet")).default;
+    const L = (await import("leaflet")).default;
+    markerLayer.current!.clearLayers();
+    routeLayer.current!.clearLayers();
+    setRouteSegments([]);
 
-      markersRef.current!.clearLayers();
-      routeLinesRef.current!.clearLayers();
+    const days      = trip.days || [];
+    const daysToShow = selectedDay !== undefined
+      ? days.filter((d) => d.day === selectedDay)
+      : days;
 
-      const allBounds: L.LatLngTuple[] = [];
-      const days = trip.days || [];
+    const allBounds: L.LatLngTuple[] = [];
+    const newSegments: RouteSegment[] = [];
 
-      const daysToShow =
-        selectedDay !== undefined
-          ? days.filter((d) => d.day === selectedDay)
-          : days;
+    for (const day of daysToShow) {
+      const color   = DAY_COLORS[(day.day - 1) % DAY_COLORS.length];
+      const places  = day.places?.filter((p) => p.coordinates?.length === 2) ?? [];
 
-      daysToShow.forEach((day: Day) => {
-        const color = DAY_COLORS[(day.day - 1) % DAY_COLORS.length];
-        const dayCoords: L.LatLngTuple[] = [];
+      // Add numbered markers
+      places.forEach((place, idx) => {
+        const [lat, lng] = place.coordinates;
+        if (isNaN(lat) || isNaN(lng)) return;
+        const coords: L.LatLngTuple = [lat, lng];
+        allBounds.push(coords);
 
-        // Draw route polyline between places
-        if (day.places && day.places.length > 1) {
-          const routeCoords: L.LatLngTuple[] = day.places
-            .filter((p) => p.coordinates && p.coordinates.length === 2)
-            .map((p) => [p.coordinates[0], p.coordinates[1]] as L.LatLngTuple);
+        const emoji = PLACE_ICONS[place.type] ?? "📍";
 
-          if (routeCoords.length > 1) {
-            L.polyline(routeCoords, {
-              color,
-              weight: 3,
-              opacity: 0.7,
-              dashArray: "8, 6",
-            }).addTo(routeLinesRef.current!);
-          }
-        }
-
-        // Add markers for each place
-        day.places?.forEach((place: Place, placeIndex: number) => {
-          if (!place.coordinates || place.coordinates.length !== 2) return;
-
-          const [lat, lng] = place.coordinates;
-          if (isNaN(lat) || isNaN(lng)) return;
-
-          const coords: L.LatLngTuple = [lat, lng];
-          allBounds.push(coords);
-          dayCoords.push(coords);
-
-          const emoji = PLACE_ICONS[place.type] || "📍";
-
-          // Custom HTML marker
-          const markerHtml = `
-            <div style="
-              position: relative;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              width: 40px;
-              height: 40px;
-            ">
+        const icon = L.divIcon({
+          className: "custom-marker",
+          iconSize:   [42, 42],
+          iconAnchor: [21, 42],
+          popupAnchor:[0, -46],
+          html: `
+            <div style="position:relative;width:42px;height:42px;display:flex;align-items:center;justify-content:center;">
               <div style="
-                width: 36px;
-                height: 36px;
-                background: ${color};
-                border: 3px solid white;
-                border-radius: 50% 50% 50% 0;
-                transform: rotate(-45deg);
-                box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-                cursor: pointer;
-                transition: transform 0.2s;
+                width:38px;height:38px;
+                background:${color};
+                border:3px solid #fff;
+                border-radius:50% 50% 50% 0;
+                transform:rotate(-45deg);
+                box-shadow:0 4px 14px rgba(0,0,0,0.5);
               "></div>
-              <div style="
-                position: absolute;
-                font-size: 14px;
-                top: 4px;
-                left: 50%;
-                transform: translateX(-50%);
-              ">${emoji}</div>
-              <div style="
-                position: absolute;
-                bottom: -2px;
-                right: -2px;
-                width: 16px;
-                height: 16px;
-                background: white;
-                border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 9px;
-                font-weight: bold;
-                color: ${color};
-                box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-              ">${placeIndex + 1}</div>
-            </div>
-          `;
-
-          const customIcon = L.divIcon({
-            html: markerHtml,
-            className: "custom-marker",
-            iconSize: [40, 40],
-            iconAnchor: [20, 40],
-            popupAnchor: [0, -42],
-          });
-
-          const marker = L.marker(coords, { icon: customIcon });
-
-          const popupHtml = `
-            <div style="min-width: 200px;">
-              <div style="
-                font-weight: 600;
-                font-size: 14px;
-                margin-bottom: 4px;
-                color: #f8fafc;
-              ">${emoji} ${place.name}</div>
-              <div style="
-                font-size: 11px;
-                color: #94a3b8;
-                background: ${color}22;
-                padding: 2px 8px;
-                border-radius: 20px;
-                display: inline-block;
-                margin-bottom: 6px;
-                border: 1px solid ${color}44;
-              ">Day ${day.day} · ${place.type}</div>
-              ${
-                place.duration
-                  ? `<div style="font-size: 12px; color: #94a3b8; margin-bottom: 4px;">⏱ ${place.duration}</div>`
-                  : ""
-              }
-              <p style="font-size: 12px; color: #cbd5e1; margin: 0; line-height: 1.5;">${
-                place.description?.slice(0, 120) + "..." || ""
-              }</p>
-              ${
-                place.tips
-                  ? `<div style="font-size: 11px; color: #fbbf24; margin-top: 6px; padding: 4px 8px; background: rgba(251,191,36,0.1); border-radius: 6px;">💡 ${place.tips.slice(0, 80)}</div>`
-                  : ""
-              }
-            </div>
-          `;
-
-          marker.bindPopup(popupHtml, {
-            maxWidth: 260,
-            className: "custom-popup",
-          });
-
-          marker.on("click", () => {
-            setSelectedPlace(place);
-            onPlaceSelect?.(place);
-          });
-
-          marker.addTo(markersRef.current!);
+              <span style="position:absolute;top:4px;left:50%;transform:translateX(-50%);font-size:15px;line-height:1;">${emoji}</span>
+              <span style="
+                position:absolute;bottom:-1px;right:-1px;
+                width:17px;height:17px;
+                background:#fff;border-radius:50%;
+                display:flex;align-items:center;justify-content:center;
+                font-size:9px;font-weight:700;color:${color};
+                box-shadow:0 2px 5px rgba(0,0,0,0.35);
+              ">${idx + 1}</span>
+            </div>`,
         });
+
+        const marker = L.marker(coords, { icon });
+
+        // Build popup HTML with navigation button
+        const nextPlace = places[idx + 1];
+        const navBtn = nextPlace
+          ? `<a href="${googleMapsNavUrl(place, nextPlace)}" target="_blank" rel="noopener"
+               style="
+                 display:inline-flex;align-items:center;gap:5px;margin-top:8px;
+                 padding:5px 10px;border-radius:8px;font-size:11px;font-weight:600;
+                 background:#3b82f6;color:#fff;text-decoration:none;
+               ">
+               🧭 Navigate to next stop
+             </a>`
+          : "";
+
+        const gmapsLink = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+
+        marker.bindPopup(`
+          <div style="min-width:210px;font-family:'Inter',sans-serif;">
+            <div style="font-weight:700;font-size:14px;color:#f8fafc;margin-bottom:4px;">
+              ${emoji} ${place.name}
+            </div>
+            <span style="
+              font-size:10px;background:${color}22;color:${color};
+              padding:2px 8px;border-radius:20px;border:1px solid ${color}44;
+              display:inline-block;margin-bottom:6px;text-transform:capitalize;
+            ">Day ${day.day} · ${place.type}</span>
+            ${place.duration
+              ? `<div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">⏱ ${place.duration}</div>`
+              : ""}
+            <p style="font-size:12px;color:#cbd5e1;margin:0 0 6px;line-height:1.5;">
+              ${(place.description ?? "").slice(0, 120)}…
+            </p>
+            ${place.tips
+              ? `<div style="font-size:11px;color:#fbbf24;padding:4px 8px;background:rgba(251,191,36,.1);border-radius:6px;margin-bottom:6px;">
+                   💡 ${place.tips.slice(0, 90)}
+                 </div>`
+              : ""}
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <a href="${gmapsLink}" target="_blank" rel="noopener"
+                 style="
+                   display:inline-flex;align-items:center;gap:4px;
+                   padding:4px 9px;border-radius:7px;font-size:11px;font-weight:600;
+                   background:rgba(255,255,255,.08);color:#cbd5e1;
+                   text-decoration:none;border:1px solid rgba(255,255,255,.12);
+                 ">
+                 📍 View on Maps
+              </a>
+              ${navBtn}
+            </div>
+          </div>`, { maxWidth: 280 });
+
+        marker.on("click", () => {
+          setSelectedPlace(place);
+          onPlaceSelect?.(place);
+        });
+
+        marker.addTo(markerLayer.current!);
       });
 
-      // Fit map to all markers
-      if (allBounds.length > 0) {
-        const bounds = L.latLngBounds(allBounds);
-        leafletMapRef.current!.fitBounds(bounds, { padding: [40, 40] });
+      // Fetch OSRM road routes for consecutive pairs
+      if (places.length >= 2) {
+        for (let i = 0; i < places.length - 1; i++) {
+          const fromPlace = places[i];
+          const toPlace   = places[i + 1];
+
+          if (routeMode === "road") {
+            setRouteLoading(true);
+            const seg = await fetchRoadRoute(fromPlace, toPlace);
+            if (seg) {
+              newSegments.push(seg);
+              // Draw road polyline
+              L.polyline(seg.coords, {
+                color, weight: 4, opacity: 0.85,
+                lineJoin: "round", lineCap: "round",
+              }).addTo(routeLayer.current!);
+
+              // Distance label at midpoint
+              const midIdx = Math.floor(seg.coords.length / 2);
+              const [mLat, mLng] = seg.coords[midIdx] ?? [
+                (fromPlace.coordinates[0] + toPlace.coordinates[0]) / 2,
+                (fromPlace.coordinates[1] + toPlace.coordinates[1]) / 2,
+              ];
+              L.marker([mLat, mLng], {
+                icon: L.divIcon({
+                  className: "custom-marker",
+                  iconSize: [72, 22],
+                  iconAnchor: [36, 11],
+                  html: `
+                    <div style="
+                      background:rgba(15,23,42,.85);backdrop-filter:blur(8px);
+                      border:1px solid ${color}55;border-radius:20px;
+                      padding:2px 8px;font-size:10px;font-weight:600;
+                      color:${color};white-space:nowrap;
+                      box-shadow:0 2px 8px rgba(0,0,0,.5);
+                    ">🚗 ${seg.distanceKm} km · ${formatDuration(seg.durationMin)}</div>`,
+                }),
+                interactive: false,
+                zIndexOffset: -100,
+              }).addTo(routeLayer.current!);
+            } else {
+              // Fallback: straight dashed line
+              const fallbackCoords: L.LatLngTuple[] = [
+                fromPlace.coordinates as L.LatLngTuple,
+                toPlace.coordinates as L.LatLngTuple,
+              ];
+              L.polyline(fallbackCoords, {
+                color, weight: 2, opacity: 0.5, dashArray: "6,5",
+              }).addTo(routeLayer.current!);
+            }
+          } else {
+            // Straight line mode
+            L.polyline(
+              [fromPlace.coordinates as L.LatLngTuple, toPlace.coordinates as L.LatLngTuple],
+              { color, weight: 2.5, opacity: 0.6, dashArray: "7,5" }
+            ).addTo(routeLayer.current!);
+          }
+        }
       }
-    };
+    }
 
-    updateMap();
-  }, [trip, selectedDay, isClient, onPlaceSelect]);
+    setRouteLoading(false);
+    if (newSegments.length) setRouteSegments(newSegments);
 
-  const placeTypes = [
-    { icon: <MapPin className="w-3 h-3" />, label: "Destination", color: "#3b82f6" },
-    { icon: <Eye className="w-3 h-3" />, label: "Viewpoint", color: "#8b5cf6" },
-    { icon: <Coffee className="w-3 h-3" />, label: "Restaurant", color: "#10b981" },
-    { icon: <Hotel className="w-3 h-3" />, label: "Hotel", color: "#f59e0b" },
-    { icon: <Zap className="w-3 h-3" />, label: "Activity", color: "#ef4444" },
-  ];
+    // Fit bounds
+    if (allBounds.length > 0) {
+      const bounds = L.latLngBounds(allBounds);
+      leafletMap.current!.fitBounds(bounds, { padding: [50, 50] });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trip, selectedDay, isClient, onPlaceSelect, routeMode]);
 
-  if (!isClient) {
-    return (
-      <div
-        className={`${className} bg-slate-800 rounded-2xl flex items-center justify-center`}
-      >
-        <div className="text-slate-400 text-sm flex items-center gap-2">
-          <Navigation className="w-4 h-4 animate-spin" />
-          Loading map...
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => { renderMap(); }, [renderMap]);
+
+  // ── Aggregate route data for panel ────────────────────────────────
+  const totalDistanceKm = routeSegments.reduce((s, r) => s + r.distanceKm, 0);
+  const totalDurationMin = routeSegments.reduce((s, r) => s + r.durationMin, 0);
+
+  const allPlacesForDay = (trip.days ?? [])
+    .filter((d) => selectedDay === undefined || d.day === selectedDay)
+    .flatMap((d) => d.places ?? [])
+    .filter((p) => p.coordinates?.length === 2);
+
+  // Google Maps multi-stop URL for the full day route
+  const fullDayGmapsUrl = (() => {
+    if (allPlacesForDay.length < 2) return null;
+    const origin  = allPlacesForDay[0].coordinates.join(",");
+    const dest    = allPlacesForDay.at(-1)!.coordinates.join(",");
+    const waypts  = allPlacesForDay
+      .slice(1, -1)
+      .map((p) => p.coordinates.join(","))
+      .join("|");
+    return `https://www.google.com/maps/dir/${origin}/${waypts ? waypts + "/" : ""}${dest}`;
+  })();
+
+  if (!isClient) return <MapSkeleton className={className} />;
 
   return (
-    <div className={`relative ${className}`}>
-      {/* Map container */}
-      <div ref={mapRef} className="w-full h-full rounded-2xl z-0" />
+    <div className={`relative flex flex-col overflow-hidden rounded-2xl ${className}`}>
 
-      {/* Legend */}
+      {/* ── Map canvas ─────────────────────────────────────────────── */}
+      <div ref={mapRef} className="w-full flex-1 z-0 min-h-0" />
+
+      {/* ── Route mode toggle (top-left) ──────────────────────────── */}
+      <div className="absolute left-3 top-3 z-10 flex gap-1.5">
+        {(["road", "straight"] as const).map((mode) => (
+          <button
+            key={mode}
+            onClick={() => setRouteMode(mode)}
+            title={mode === "road" ? "Show real road route" : "Straight-line route"}
+            className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium shadow transition-all ${
+              routeMode === mode
+                ? "bg-blue-600 text-white"
+                : "glass border border-white/10 text-slate-400 hover:text-white"
+            }`}
+          >
+            {mode === "road" ? <Car className="h-3 w-3" /> : <Route className="h-3 w-3" />}
+            {mode === "road" ? "Road" : "Direct"}
+          </button>
+        ))}
+        {routeLoading && (
+          <div className="flex items-center gap-1 rounded-lg glass border border-white/10 px-2.5 py-1.5 text-xs text-blue-400">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Routing…
+          </div>
+        )}
+      </div>
+
+      {/* ── Attribution ───────────────────────────────────────────── */}
+      <div className="absolute right-2 top-2 z-10 rounded-lg glass border border-white/8 px-2 py-1 text-xs text-slate-400">
+        🗺 OpenStreetMap · OSRM Routing
+      </div>
+
+      {/* ── Day legend (bottom-left) ──────────────────────────────── */}
       {trip.days && trip.days.length > 0 && (
-        <div className="absolute bottom-4 left-4 glass rounded-xl px-3 py-2 z-10 flex flex-col gap-1.5 text-xs">
-          {DAY_COLORS.slice(0, trip.days.length).map((color, i) => (
+        <div className="absolute bottom-16 left-3 z-10 flex flex-col gap-1.5 rounded-xl glass border border-white/8 px-3 py-2 text-xs">
+          {DAY_COLORS.slice(0, trip.days.length).map((col, i) => (
             <div key={i} className="flex items-center gap-2">
-              <div
-                className="w-3 h-3 rounded-full border border-white/30"
-                style={{ background: color }}
-              />
+              <div className="h-2.5 w-2.5 rounded-full border border-white/30" style={{ background: col }} />
               <span className="text-slate-300">
                 Day {i + 1}
-                {trip.days![i]?.title ? ` — ${trip.days![i].title.slice(0, 20)}` : ""}
+                {trip.days![i]?.title ? ` — ${trip.days![i].title.slice(0, 18)}` : ""}
               </span>
             </div>
           ))}
         </div>
       )}
 
-      {/* Attribution */}
-      <div className="absolute top-2 right-2 glass rounded-lg px-2 py-1 text-xs text-slate-400 z-10">
-        🗺 OpenStreetMap (Free)
-      </div>
+      {/* ── Route summary panel (bottom) ─────────────────────────── */}
+      {routeSegments.length > 0 && (
+        <div className="absolute bottom-3 left-3 right-3 z-10">
+          <div className="glass rounded-2xl border border-white/10 shadow-2xl shadow-black/40 overflow-hidden">
 
-      {/* Selected place card */}
-      {selectedPlace && (
-        <div className="absolute top-4 left-4 right-4 glass rounded-xl p-3 z-10 max-w-xs">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm text-white truncate">
-                {PLACE_ICONS[selectedPlace.type]} {selectedPlace.name}
-              </p>
-              <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">
-                {selectedPlace.description}
-              </p>
-            </div>
+            {/* Header */}
             <button
-              onClick={() => setSelectedPlace(null)}
-              className="text-slate-500 hover:text-white text-xs shrink-0"
+              onClick={() => setPanelOpen(!panelOpen)}
+              className="flex w-full items-center justify-between px-4 py-2.5"
             >
-              ✕
+              <div className="flex items-center gap-3 text-sm">
+                <div className="flex items-center gap-1.5 font-semibold text-white">
+                  <Navigation className="h-4 w-4 text-blue-400" />
+                  Route Summary
+                </div>
+                <div className="flex items-center gap-3 text-xs text-slate-400">
+                  <span className="flex items-center gap-1">
+                    <Route className="h-3 w-3" />
+                    {totalDistanceKm.toFixed(1)} km
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {formatDuration(totalDurationMin)} drive
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <MapPin className="h-3 w-3" />
+                    {routeSegments.length + 1} stops
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {fullDayGmapsUrl && (
+                  <a
+                    href={fullDayGmapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-500 transition-colors"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Open in Maps
+                  </a>
+                )}
+                {panelOpen
+                  ? <ChevronDown className="h-4 w-4 text-slate-400" />
+                  : <ChevronUp   className="h-4 w-4 text-slate-400" />}
+              </div>
             </button>
+
+            {/* Segments list */}
+            {panelOpen && (
+              <div className="max-h-36 overflow-y-auto border-t border-white/5 px-4 py-2 scrollbar-none">
+                {routeSegments.map((seg, i) => (
+                  <div key={i} className="flex items-center gap-3 py-1.5 text-xs">
+                    {/* Step connector */}
+                    <div className="flex flex-col items-center gap-0.5">
+                      <div className="h-2 w-2 rounded-full bg-slate-400" />
+                      <div className="h-3 w-px bg-slate-600" />
+                      <div className="h-2 w-2 rounded-full bg-blue-400" />
+                    </div>
+                    {/* Route info */}
+                    <div className="flex flex-1 min-w-0 items-center justify-between">
+                      <div className="min-w-0">
+                        <span className="text-slate-300 truncate font-medium">
+                          {seg.from.name}
+                        </span>
+                        <span className="mx-1.5 text-slate-600">→</span>
+                        <span className="text-slate-300 truncate font-medium">
+                          {seg.to.name}
+                        </span>
+                      </div>
+                      <div className="ml-3 flex shrink-0 items-center gap-2 text-slate-500">
+                        <span className="flex items-center gap-0.5">
+                          <Route className="h-2.5 w-2.5" />
+                          {seg.distanceKm} km
+                        </span>
+                        <span className="flex items-center gap-0.5">
+                          <Clock className="h-2.5 w-2.5" />
+                          {formatDuration(seg.durationMin)}
+                        </span>
+                        <a
+                          href={googleMapsNavUrl(seg.from, seg.to)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-0.5 rounded-md bg-blue-500/15 px-1.5 py-0.5 text-blue-400 hover:bg-blue-500/25 transition-colors"
+                        >
+                          <Navigation className="h-2.5 w-2.5" />
+                          Go
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-          {selectedPlace.duration && (
-            <div className="mt-2 text-xs text-blue-400 flex items-center gap-1">
-              <Navigation className="w-3 h-3" />
-              {selectedPlace.duration}
+        </div>
+      )}
+
+      {/* ── Selected place card (top) ─────────────────────────────── */}
+      {selectedPlace && (
+        <div className="absolute left-3 right-3 top-12 z-10 max-w-xs">
+          <div className="glass rounded-xl border border-white/10 p-3 shadow-xl shadow-black/30">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-white">
+                  {PLACE_ICONS[selectedPlace.type]} {selectedPlace.name}
+                </p>
+                <p className="mt-0.5 line-clamp-2 text-xs text-slate-400">
+                  {selectedPlace.description}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedPlace(null)}
+                className="shrink-0 text-xs text-slate-500 hover:text-white"
+              >✕</button>
             </div>
-          )}
+            {selectedPlace.duration && (
+              <div className="mt-2 flex items-center gap-1 text-xs text-blue-400">
+                <Clock className="h-3 w-3" />
+                {selectedPlace.duration}
+              </div>
+            )}
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${selectedPlace.coordinates[0]},${selectedPlace.coordinates[1]}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500 transition-colors w-fit"
+            >
+              <ExternalLink className="h-3 w-3" />
+              View on Google Maps
+            </a>
+          </div>
         </div>
       )}
     </div>

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { chatWithAI } from "@/lib/ai/tripAI";
+
+export const maxDuration = 300;
 import connectDB from "@/lib/db/mongoose";
 import Trip from "@/models/Trip";
 

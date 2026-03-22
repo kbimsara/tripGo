@@ -3,6 +3,9 @@ import { auth } from "@/lib/auth";
 import { generateTripPlan } from "@/lib/ai/tripAI";
 import { TripFormData } from "@/types";
 
+// Local LLMs can be slow — allow up to 5 minutes
+export const maxDuration = 300;
+
 export async function POST(req: NextRequest) {
   try {
     const session = await auth();
