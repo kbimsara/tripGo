@@ -1,13 +1,14 @@
 /**
  * TripGo AI — powered by Ollama (local LLM, zero API cost)
- * Docs: https://ollama.com
+ * Coordinates are validated + corrected via Nominatim (free OSM geocoder)
+ * because LLMs often hallucinate GPS values.
  */
-import { TripFormData, Trip, ChatMessage } from "@/types";
+import { TripFormData, Trip, Place, ChatMessage } from "@/types";
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
 const OLLAMA_MODEL    = process.env.OLLAMA_MODEL    || "qwen2.5:7b";
 
-// ── Shared system prompt ────────────────────────────────────────────────────
+// ── System prompt ────────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `You are TripGo AI, an expert travel planner that creates detailed, personalized trip itineraries.
 
 When generating a trip plan you MUST return ONLY valid JSON — no markdown, no explanation, no code fences.
@@ -60,7 +61,7 @@ STRICT rules:
 - coordinates must be real accurate GPS numbers [lat, lng] — never use 0,0
 - Return ONLY the JSON object — no text before or after it`;
 
-// ── Low-level Ollama caller ─────────────────────────────────────────────────
+// ── Ollama low-level caller ──────────────────────────────────────────────────
 async function ollamaChat(
   system: string,
   messages: Array<{ role: "user" | "assistant"; content: string }>,
@@ -74,13 +75,12 @@ async function ollamaChat(
       messages: [{ role: "system", content: system }, ...messages],
       stream: false,
       options: {
-        temperature:  opts.temperature  ?? 0.65,
-        num_predict:  opts.num_predict  ?? 8192,
-        top_p:        0.9,
+        temperature:    opts.temperature  ?? 0.65,
+        num_predict:    opts.num_predict  ?? 8192,
+        top_p:          0.9,
         repeat_penalty: 1.1,
       },
     }),
-    // Local models can be slow — allow up to 5 minutes
     signal: AbortSignal.timeout(300_000),
   });
 
@@ -93,24 +93,123 @@ async function ollamaChat(
   return (data.message?.content as string) ?? "";
 }
 
-// ── Robust JSON extractor ───────────────────────────────────────────────────
-// Local models sometimes wrap output in ```json ... ``` even when asked not to.
+// ── JSON extractor (handles markdown code fences from stubborn models) ────────
 function extractJSON(raw: string): string {
-  // Strip markdown code fences
-  let text = raw.replace(/^```(?:json)?\s*/m, "").replace(/\s*```\s*$/m, "").trim();
+  let text = raw
+    .replace(/^```(?:json)?\s*/m, "")
+    .replace(/\s*```\s*$/m, "")
+    .trim();
 
-  // Find outermost { ... }
   const start = text.indexOf("{");
   const end   = text.lastIndexOf("}");
-  if (start !== -1 && end > start) {
-    text = text.slice(start, end + 1);
-  }
-
+  if (start !== -1 && end > start) text = text.slice(start, end + 1);
   return text;
 }
 
-// ── Public: generate full trip plan ────────────────────────────────────────
+// ── Coordinate validation ────────────────────────────────────────────────────
+function isValidCoord(coords: unknown): coords is [number, number] {
+  if (!Array.isArray(coords) || coords.length !== 2) return false;
+  const [lat, lng] = coords as [number, number];
+  if (typeof lat !== "number" || typeof lng !== "number") return false;
+  if (isNaN(lat) || isNaN(lng)) return false;
+  if (lat === 0 && lng === 0) return false;           // null island
+  if (lat < -90 || lat > 90) return false;            // invalid lat
+  if (lng < -180 || lng > 180) return false;          // invalid lng
+  // Reject suspiciously round numbers (e.g. 48.0, 2.0) — signs of hallucination
+  const isRound = (n: number) => Math.abs(n - Math.round(n)) < 0.001;
+  if (isRound(lat) && isRound(lng)) return false;
+  return true;
+}
+
+// ── Nominatim geocoder (free OpenStreetMap — no API key needed) ──────────────
+// Rate limit: 1 req / second per IP. We wait 1 100 ms between each call.
+async function geocode(query: string): Promise<[number, number] | null> {
+  try {
+    const url =
+      "https://nominatim.openstreetmap.org/search?" +
+      new URLSearchParams({ q: query, format: "json", limit: "1" });
+
+    const res = await fetch(url, {
+      headers: {
+        // Nominatim requires a descriptive User-Agent
+        "User-Agent": "TripGo/1.0 (https://github.com/kbimsara/tripGo)",
+        "Accept-Language": "en",
+      },
+      signal: AbortSignal.timeout(6_000),
+    });
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    if (!Array.isArray(data) || !data.length) return null;
+
+    const lat = parseFloat(data[0].lat);
+    const lng = parseFloat(data[0].lon);
+    if (!isValidCoord([lat, lng])) return null;
+
+    return [lat, lng];
+  } catch {
+    return null;
+  }
+}
+
+// Respect Nominatim's 1 req/sec policy
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Fix every place's coordinates using Nominatim.
+ * Strategy (tries each in order until a valid coord is found):
+ *   1. name + full address  (most specific)
+ *   2. name + first destination  (context-aware)
+ *   3. name alone
+ *   4. Keep LLM coordinates if they look valid
+ *   5. Fall back to the destination city center
+ */
+async function geocodePlaces(
+  places: Place[],
+  destinations: string[]
+): Promise<Place[]> {
+  const destContext = destinations[0] ?? "";
+
+  const fixed: Place[] = [];
+
+  for (const place of places) {
+    let coord: [number, number] | null = null;
+
+    // Build search queries from most to least specific
+    const queries: string[] = [];
+    if (place.address && place.address.length > 4)
+      queries.push(`${place.name}, ${place.address}`);
+    if (destContext)
+      queries.push(`${place.name}, ${destContext}`);
+    queries.push(place.name);
+
+    for (const q of queries) {
+      coord = await geocode(q);
+      await sleep(1_100); // Nominatim rate limit
+      if (coord) break;
+    }
+
+    // If Nominatim failed, trust the LLM coord only if it passes validation
+    if (!coord && isValidCoord(place.coordinates)) {
+      coord = place.coordinates;
+    }
+
+    // Last resort: geocode the destination city itself
+    if (!coord && destContext) {
+      coord = await geocode(destContext);
+      await sleep(1_100);
+    }
+
+    fixed.push({ ...place, coordinates: coord ?? [0, 0] });
+  }
+
+  return fixed;
+}
+
+// ── Public: generate full trip plan ─────────────────────────────────────────
 export async function generateTripPlan(formData: TripFormData): Promise<Trip> {
+  // Step 1 — Ask the LLM for the itinerary structure
   const prompt =
     `Create a ${formData.days}-day trip itinerary for: ${formData.destinations.join(", ")}
 
@@ -125,15 +224,31 @@ Return ONLY the JSON object — no commentary, no markdown.`;
   const raw      = await ollamaChat(SYSTEM_PROMPT, [{ role: "user", content: prompt }], { num_predict: 8192 });
   const jsonText = extractJSON(raw);
 
+  let trip: Trip;
   try {
-    return JSON.parse(jsonText) as Trip;
-  } catch (e) {
+    trip = JSON.parse(jsonText) as Trip;
+  } catch {
     console.error("JSON parse failed. Raw model output:\n", raw.slice(0, 500));
     throw new Error("Model returned invalid JSON. Try a larger/better model or retry.");
   }
+
+  // Step 2 — Fix coordinates with Nominatim geocoding
+  // LLMs frequently hallucinate GPS values; real geocoding ensures the map is correct.
+  console.log(`[TripGo] Geocoding coordinates for ${trip.days?.length ?? 0} days…`);
+
+  if (Array.isArray(trip.days)) {
+    for (const day of trip.days) {
+      if (Array.isArray(day.places) && day.places.length > 0) {
+        day.places = await geocodePlaces(day.places, formData.destinations);
+      }
+    }
+  }
+
+  console.log("[TripGo] Geocoding complete ✓");
+  return trip;
 }
 
-// ── Public: chat to customize existing trip ─────────────────────────────────
+// ── Public: chat to customize existing trip ──────────────────────────────────
 export async function chatWithAI(
   trip: Partial<Trip>,
   messages: ChatMessage[],
@@ -160,15 +275,33 @@ If the user is just chatting or asking travel questions, reply conversationally 
     content: m.content,
   }));
 
-  const raw = await ollamaChat(system, [...history, { role: "user", content: userMessage }], {
-    num_predict: 6144,
-    temperature: 0.7,
-  });
+  const raw = await ollamaChat(
+    system,
+    [...history, { role: "user", content: userMessage }],
+    { num_predict: 6144, temperature: 0.7 }
+  );
 
   if (raw.includes("UPDATED_TRIP_JSON:")) {
     const [explanation, jsonPart] = raw.split("UPDATED_TRIP_JSON:");
     try {
       const updatedTrip = JSON.parse(extractJSON(jsonPart.trim())) as Partial<Trip>;
+
+      // Fix coordinates on any newly added / changed places
+      if (Array.isArray(updatedTrip.days) && trip.destinations) {
+        for (const day of updatedTrip.days) {
+          if (!Array.isArray(day.places)) continue;
+
+          // Only geocode places whose coordinates look wrong
+          const needsGeocode = day.places.filter((p) => !isValidCoord(p.coordinates));
+          if (needsGeocode.length > 0) {
+            const fixed = await geocodePlaces(needsGeocode, trip.destinations);
+            // Merge back
+            const fixedMap = Object.fromEntries(fixed.map((p) => [p.id, p]));
+            day.places = day.places.map((p) => fixedMap[p.id] ?? p);
+          }
+        }
+      }
+
       return { text: explanation.trim(), updatedTrip };
     } catch {
       return { text: explanation.trim() };
