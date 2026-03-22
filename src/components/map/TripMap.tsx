@@ -173,7 +173,16 @@ export default function TripMap({ trip, selectedDay, onPlaceSelect, className = 
 
     for (const day of daysToShow) {
       const color   = DAY_COLORS[(day.day - 1) % DAY_COLORS.length];
-      const places  = day.places?.filter((p) => p.coordinates?.length === 2) ?? [];
+      const places  = (day.places ?? []).filter((p) => {
+        if (!Array.isArray(p.coordinates) || p.coordinates.length !== 2) return false;
+        const [lat, lng] = p.coordinates;
+        // Exclude null island (0,0) and out-of-range coords from failed geocoding
+        return typeof lat === "number" && typeof lng === "number"
+          && !isNaN(lat) && !isNaN(lng)
+          && !(lat === 0 && lng === 0)
+          && lat >= -90 && lat <= 90
+          && lng >= -180 && lng <= 180;
+      });
 
       // Add numbered markers
       places.forEach((place, idx) => {
