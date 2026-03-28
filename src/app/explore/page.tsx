@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import { Search, SlidersHorizontal, Globe, TrendingUp, Clock, Sparkles } from "lucide-react";
 import Navbar from "@/components/ui/Navbar";
@@ -28,18 +28,26 @@ export default function ExplorePage() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedTag, setSelectedTag] = useState("All");
   const [sort, setSort] = useState("recent");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [showSort, setShowSort] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Debounce search input by 500ms
+  useEffect(() => {
+    debounceRef.current = setTimeout(() => setDebouncedSearch(search), 500);
+    return () => clearTimeout(debounceRef.current);
+  }, [search]);
 
   const fetchTrips = useCallback(async (reset = false) => {
     setLoading(true);
     const p = reset ? 1 : page;
     const params = new URLSearchParams({
       sort, page: p.toString(),
-      ...(search && { search }),
+      ...(debouncedSearch && { search: debouncedSearch }),
       ...(selectedTag !== "All" && { tag: selectedTag }),
     });
     const res = await fetch(`/api/trips/public?${params}`);
@@ -51,9 +59,9 @@ export default function ExplorePage() {
     }
     setLoading(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, selectedTag, sort, page]);
+  }, [debouncedSearch, selectedTag, sort, page]);
 
-  useEffect(() => { fetchTrips(true); }, [search, selectedTag, sort]); // eslint-disable-line
+  useEffect(() => { fetchTrips(true); }, [debouncedSearch, selectedTag, sort]); // eslint-disable-line
 
   const handleSave = async (tripId: string) => {
     await fetch(`/api/trips/${tripId}/save`, { method: "POST" });

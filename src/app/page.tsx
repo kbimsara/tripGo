@@ -401,7 +401,7 @@ export default function HomePage() {
             <Link href="/login" className="hover:text-white transition-colors">Sign In</Link>
           </div>
           <p className="text-sm text-slate-600">
-            Maps: OpenStreetMap · AI: Claude · © 2025 TripGo
+            Maps: OpenStreetMap · AI: Claude · © {new Date().getFullYear()} TripGo
           </p>
         </div>
       </footer>

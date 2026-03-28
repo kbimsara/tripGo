@@ -32,6 +32,7 @@ import {
 import dynamic from "next/dynamic";
 import Navbar from "@/components/ui/Navbar";
 import Button from "@/components/ui/Button";
+import { useToast } from "@/components/ui/Toast";
 import ChatPanel from "@/components/chat/ChatPanel";
 import { Trip, Place, ChatMessage, Day } from "@/types";
 import { formatDate, getImageUrl } from "@/lib/utils";
@@ -91,6 +92,7 @@ export default function TripPage({
   const [showSettings, setShowSettings] = useState(false);
   const [cloning, setCloning] = useState(false);
 
+  const { toast } = useToast();
   const isOwner = session?.user?.id && trip?.owner?._id === session.user.id;
 
   useEffect(() => {
@@ -117,30 +119,54 @@ export default function TripPage({
   const handleSave = async () => {
     if (!session) { router.push("/login"); return; }
     setSaving(true);
-    const res = await fetch(`/api/trips/${id}/save`, { method: "POST" });
-    const data = await res.json();
-    setIsSaved(data.saved);
-    setSaving(false);
+    try {
+      const res = await fetch(`/api/trips/${id}/save`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to save");
+      const data = await res.json();
+      setIsSaved(data.saved);
+      toast(data.saved ? "Trip saved!" : "Trip unsaved", data.saved ? "success" : "info");
+    } catch {
+      toast("Failed to save trip", "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleClone = async () => {
     if (!session) { router.push("/login"); return; }
     setCloning(true);
-    const res = await fetch(`/api/trips/${id}/save`, { method: "PUT" });
-    const data = await res.json();
-    setCloning(false);
-    if (data.trip) router.push(`/trip/${data.trip._id}`);
+    try {
+      const res = await fetch(`/api/trips/${id}/save`, { method: "PUT" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to clone");
+      toast("Trip cloned! Redirecting...");
+      if (data.trip) router.push(`/trip/${data.trip._id}`);
+    } catch {
+      toast("Failed to clone trip", "error");
+    } finally {
+      setCloning(false);
+    }
   };
 
   const togglePublic = async () => {
     setTogglingPublic(true);
-    const res = await fetch(`/api/trips/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isPublic: !isPublic }),
-    });
-    if (res.ok) setIsPublic(!isPublic);
-    setTogglingPublic(false);
+    try {
+      const res = await fetch(`/api/trips/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isPublic: !isPublic }),
+      });
+      if (res.ok) {
+        setIsPublic(!isPublic);
+        toast(!isPublic ? "Trip is now public" : "Trip is now private");
+      } else {
+        toast("Failed to update visibility", "error");
+      }
+    } catch {
+      toast("Failed to update visibility", "error");
+    } finally {
+      setTogglingPublic(false);
+    }
   };
 
   const deleteTrip = async () => {
@@ -156,7 +182,7 @@ export default function TripPage({
 
   const shareTrip = () => {
     navigator.clipboard.writeText(window.location.href);
-    alert("Link copied to clipboard!");
+    toast("Link copied to clipboard!");
   };
 
   if (loading) {

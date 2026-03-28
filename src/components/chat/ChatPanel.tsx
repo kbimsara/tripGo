@@ -261,7 +261,7 @@ export default function ChatPanel({
             className="shrink-0"
             icon={loading ? undefined : <Send className="w-4 h-4" />}
           >
-            {loading ? "" : ""}
+            {loading ? "" : "Send"}
           </Button>
         </div>
         <p className="text-xs text-slate-600 text-center mt-1.5">

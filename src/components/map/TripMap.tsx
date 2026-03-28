@@ -289,24 +289,32 @@ export default function TripMap({ trip, selectedDay, onPlaceSelect, className = 
         marker.addTo(markerLayer.current!);
       });
 
-      // Fetch OSRM road routes for consecutive pairs
+      // Fetch OSRM road routes for consecutive pairs (in parallel)
       if (places.length >= 2) {
-        for (let i = 0; i < places.length - 1; i++) {
-          const fromPlace = places[i];
-          const toPlace   = places[i + 1];
+        if (routeMode !== "straight") {
+          setRouteLoading(true);
+          const pairs = places.slice(0, -1).map((fromPlace, i) => ({
+            fromPlace,
+            toPlace: places[i + 1],
+          }));
 
-          if (routeMode !== "straight") {
-            setRouteLoading(true);
-            const seg = await fetchRoadRoute(fromPlace, toPlace, routeMode);
+          const results = await Promise.all(
+            pairs.map(({ fromPlace, toPlace }) =>
+              fetchRoadRoute(fromPlace, toPlace, routeMode)
+            )
+          );
+
+          for (let i = 0; i < pairs.length; i++) {
+            const seg = results[i];
+            const { fromPlace, toPlace } = pairs[i];
+
             if (seg) {
               newSegments.push(seg);
-              // Draw road polyline
               L.polyline(seg.coords, {
                 color, weight: 4, opacity: 0.85,
                 lineJoin: "round", lineCap: "round",
               }).addTo(routeLayer.current!);
 
-              // Distance label at midpoint
               const midIdx = Math.floor(seg.coords.length / 2);
               const [mLat, mLng] = seg.coords[midIdx] ?? [
                 (fromPlace.coordinates[0] + toPlace.coordinates[0]) / 2,
@@ -330,7 +338,6 @@ export default function TripMap({ trip, selectedDay, onPlaceSelect, className = 
                 zIndexOffset: -100,
               }).addTo(routeLayer.current!);
             } else {
-              // Fallback: straight dashed line
               const fallbackCoords: L.LatLngTuple[] = [
                 fromPlace.coordinates as L.LatLngTuple,
                 toPlace.coordinates as L.LatLngTuple,
@@ -339,10 +346,11 @@ export default function TripMap({ trip, selectedDay, onPlaceSelect, className = 
                 color, weight: 2, opacity: 0.5, dashArray: "6,5",
               }).addTo(routeLayer.current!);
             }
-          } else {
-            // Straight line mode
+          }
+        } else {
+          for (let i = 0; i < places.length - 1; i++) {
             L.polyline(
-              [fromPlace.coordinates as L.LatLngTuple, toPlace.coordinates as L.LatLngTuple],
+              [places[i].coordinates as L.LatLngTuple, places[i + 1].coordinates as L.LatLngTuple],
               { color, weight: 2.5, opacity: 0.6, dashArray: "7,5" }
             ).addTo(routeLayer.current!);
           }

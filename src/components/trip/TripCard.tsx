@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { formatDate, getImageUrl } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface TripCardProps {
   trip: Trip;
@@ -31,6 +31,8 @@ const BUDGET_BADGE: Record<string, { label: string; cls: string }> = {
 export default function TripCard({ trip, showOwner = false, onSave, isSaved = false }: TripCardProps) {
   const [saved, setSaved] = useState(isSaved);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => { setSaved(isSaved); }, [isSaved]);
 
   const imageUrl =
     trip.coverImage ||
