@@ -20,7 +20,7 @@ const SORT_OPTIONS = [
 ];
 
 function SkeletonCard() {
-  return <div className="h-72 rounded-2xl bg-white/5 shimmer" />;
+  return <div className="h-72 rounded-2xl bg-slate-100 shimmer" />;
 }
 
 export default function ExplorePage() {
@@ -36,7 +36,6 @@ export default function ExplorePage() {
   const [showSort, setShowSort] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // Debounce search input by 500ms
   useEffect(() => {
     debounceRef.current = setTimeout(() => setDebouncedSearch(search), 500);
     return () => clearTimeout(debounceRef.current);
@@ -68,24 +67,24 @@ export default function ExplorePage() {
   };
 
   return (
-    <div className="animated-gradient min-h-screen">
+    <div className="min-h-screen bg-slate-50">
       <Navbar />
 
       {/* ── Hero ── */}
-      <div className="border-b border-white/5 pb-10 pt-24">
+      <div className="bg-white border-b border-slate-100 pb-10 pt-24">
         <div className="mx-auto max-w-3xl px-6 text-center">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-blue-500/25 bg-blue-500/10 px-4 py-1.5 text-sm text-blue-300">
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-1.5 text-sm text-blue-600 font-medium">
               <Globe className="h-4 w-4" />
               Community Trips
             </div>
             <h1
               style={{ fontFamily: "'Playfair Display', Georgia, serif" }}
-              className="mb-3 text-4xl font-bold text-white sm:text-5xl"
+              className="mb-3 text-4xl font-bold text-slate-900 sm:text-5xl"
             >
               Explore <span className="gradient-text">Shared Trips</span>
             </h1>
-            <p className="mb-8 text-slate-400">
+            <p className="mb-8 text-slate-500">
               Discover AI-crafted itineraries shared by travelers worldwide. Save favorites or clone any trip as your own.
             </p>
 
@@ -96,7 +95,7 @@ export default function ExplorePage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search destinations, tags..."
-                className="w-full rounded-2xl border border-white/10 bg-white/5 py-4 pl-12 pr-4 text-white placeholder-slate-500 backdrop-blur outline-none transition-all focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/30"
+                className="w-full rounded-2xl border border-slate-200 bg-white py-4 pl-12 pr-4 text-slate-900 placeholder-slate-400 outline-none shadow-sm transition-all focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
               />
             </div>
           </motion.div>
@@ -115,8 +114,8 @@ export default function ExplorePage() {
                 onClick={() => setSelectedTag(tag)}
                 className={`shrink-0 rounded-full border px-4 py-1.5 text-sm font-medium transition-all ${
                   selectedTag === tag
-                    ? "border-blue-500 bg-blue-600 text-white"
-                    : "border-white/10 bg-white/5 text-slate-400 hover:border-white/20 hover:text-white"
+                    ? "border-blue-500 bg-blue-600 text-white shadow-sm"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:text-blue-600 shadow-sm"
                 }`}
               >
                 {tag}
@@ -128,19 +127,21 @@ export default function ExplorePage() {
           <div className="relative shrink-0">
             <button
               onClick={() => setShowSort(!showSort)}
-              className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300 transition-colors hover:text-white"
+              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 transition-colors hover:border-slate-300 shadow-sm"
             >
-              <SlidersHorizontal className="h-4 w-4" />
+              <SlidersHorizontal className="h-4 w-4 text-slate-400" />
               <span className="hidden sm:inline">{SORT_OPTIONS.find((s) => s.value === sort)?.label}</span>
             </button>
             {showSort && (
-              <div className="absolute right-0 z-20 mt-2 w-44 overflow-hidden rounded-xl border border-white/10 bg-slate-800 shadow-2xl">
+              <div className="absolute right-0 z-20 mt-2 w-44 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
                 {SORT_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
                     onClick={() => { setSort(opt.value); setShowSort(false); }}
                     className={`flex w-full items-center gap-2.5 px-4 py-3 text-sm transition-colors ${
-                      sort === opt.value ? "bg-blue-500/15 text-blue-400" : "text-slate-300 hover:bg-white/5 hover:text-white"
+                      sort === opt.value
+                        ? "bg-blue-50 text-blue-600"
+                        : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
                     }`}
                   >
                     {opt.icon}
@@ -159,11 +160,11 @@ export default function ExplorePage() {
           </div>
         ) : trips.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5">
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100">
               <Globe className="h-8 w-8 text-slate-400" />
             </div>
-            <h3 className="mb-2 text-lg font-semibold text-white">No trips found</h3>
-            <p className="mb-6 text-sm text-slate-400">
+            <h3 className="mb-2 text-lg font-semibold text-slate-900">No trips found</h3>
+            <p className="mb-6 text-sm text-slate-500">
               {search ? `No results for "${search}"` : "Be the first to share a trip!"}
             </p>
             <Button onClick={() => { setSearch(""); setSelectedTag("All"); }} variant="ghost">

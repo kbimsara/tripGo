@@ -23,25 +23,24 @@ import {
   Zap,
   Navigation,
   Calendar,
-  Users,
   DollarSign,
   Loader2,
   Trash2,
-  Edit3,
+  Sparkles,
+  Route,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import Navbar from "@/components/ui/Navbar";
 import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import ChatPanel from "@/components/chat/ChatPanel";
-import { Trip, Place, ChatMessage, Day } from "@/types";
+import { Trip, Place, ChatMessage } from "@/types";
 import { formatDate, getImageUrl } from "@/lib/utils";
 
-// Dynamic import to avoid SSR issues with Leaflet
 const TripMap = dynamic(() => import("@/components/map/TripMap"), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-full bg-slate-800/50 rounded-2xl flex items-center justify-center">
+    <div className="w-full h-full bg-slate-800 rounded-2xl flex items-center justify-center">
       <div className="text-slate-400 flex items-center gap-2">
         <Loader2 className="w-5 h-5 animate-spin" />
         Loading map...
@@ -52,19 +51,28 @@ const TripMap = dynamic(() => import("@/components/map/TripMap"), {
 
 const PLACE_TYPE_ICONS: Record<Place["type"], React.ReactNode> = {
   destination: <MapPin className="w-4 h-4" />,
-  viewpoint: <Eye className="w-4 h-4" />,
-  restaurant: <Coffee className="w-4 h-4" />,
-  hotel: <Hotel className="w-4 h-4" />,
-  activity: <Zap className="w-4 h-4" />,
+  viewpoint:   <Eye className="w-4 h-4" />,
+  restaurant:  <Coffee className="w-4 h-4" />,
+  hotel:       <Hotel className="w-4 h-4" />,
+  activity:    <Zap className="w-4 h-4" />,
 };
 
 const PLACE_TYPE_COLORS: Record<Place["type"], string> = {
-  destination: "text-blue-400 bg-blue-500/10 border-blue-500/20",
-  viewpoint: "text-purple-400 bg-purple-500/10 border-purple-500/20",
-  restaurant: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-  hotel: "text-amber-400 bg-amber-500/10 border-amber-500/20",
-  activity: "text-red-400 bg-red-500/10 border-red-500/20",
+  destination: "text-blue-600 bg-blue-50 border-blue-100",
+  viewpoint:   "text-violet-600 bg-violet-50 border-violet-100",
+  restaurant:  "text-emerald-600 bg-emerald-50 border-emerald-100",
+  hotel:       "text-amber-600 bg-amber-50 border-amber-100",
+  activity:    "text-red-600 bg-red-50 border-red-100",
 };
+
+const DAY_COLORS = [
+  "bg-blue-500",
+  "bg-violet-500",
+  "bg-emerald-500",
+  "bg-orange-500",
+  "bg-pink-500",
+  "bg-cyan-500",
+];
 
 type Tab = "itinerary" | "map" | "chat";
 
@@ -104,9 +112,7 @@ export default function TripPage({
         setTrip(data.trip);
         setChatHistory(data.trip.chatHistory || []);
         setIsPublic(data.trip.isPublic);
-        setIsSaved(
-          data.trip.savedBy?.includes(session?.user?.id || "") || false
-        );
+        setIsSaved(data.trip.savedBy?.includes(session?.user?.id || "") || false);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load trip");
       } finally {
@@ -187,10 +193,10 @@ export default function TripPage({
 
   if (loading) {
     return (
-      <div className="min-h-screen animated-gradient flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 text-blue-400 animate-spin mx-auto mb-4" />
-          <p className="text-slate-400">Loading your trip...</p>
+          <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
+          <p className="text-slate-500">Loading your trip...</p>
         </div>
       </div>
     );
@@ -198,9 +204,9 @@ export default function TripPage({
 
   if (error || !trip) {
     return (
-      <div className="min-h-screen animated-gradient flex items-center justify-center">
-        <div className="text-center glass p-8 rounded-2xl">
-          <p className="text-red-400 mb-4">{error || "Trip not found"}</p>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
+          <p className="text-red-500 mb-4">{error || "Trip not found"}</p>
           <Button onClick={() => router.push("/explore")}>Browse Trips</Button>
         </div>
       </div>
@@ -213,45 +219,51 @@ export default function TripPage({
     getImageUrl(
       trip.coverImageQuery || trip.destinations?.join(" ") || "travel",
       1200,
-      600
+      500
     );
 
+  const NAV_TABS = [
+    { id: "itinerary" as Tab, icon: <List className="w-4 h-4" />,        label: "Itinerary" },
+    { id: "map"       as Tab, icon: <Map className="w-4 h-4" />,         label: "Map" },
+    { id: "chat"      as Tab, icon: <MessageSquare className="w-4 h-4" />, label: "AI Chat", ownerOnly: true },
+  ].filter((t) => !t.ownerOnly || isOwner);
+
   return (
-    <div className="min-h-screen bg-slate-900">
+    <div className="min-h-screen bg-slate-50">
       <Navbar />
 
-      {/* Hero Banner */}
-      <div className="relative h-72 sm:h-80 overflow-hidden">
+      {/* ── Hero Banner ── */}
+      <div className="relative h-64 sm:h-72 overflow-hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={coverImage}
           alt={trip.title}
           className="w-full h-full object-cover"
           onError={(e) => {
-            (e.target as HTMLImageElement).src = `https://source.unsplash.com/1200x600/?travel`;
+            (e.target as HTMLImageElement).src =
+              `https://picsum.photos/seed/${encodeURIComponent(trip.title)}/1200/500`;
           }}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-900/40 to-transparent" />
 
+        {/* Title content */}
         <div className="absolute bottom-0 left-0 right-0 p-6">
           <div className="max-w-7xl mx-auto">
-            {/* Badges */}
             <div className="flex flex-wrap gap-2 mb-3">
-              <div
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium glass ${
-                  isPublic ? "text-emerald-400" : "text-slate-400"
+              <span
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border backdrop-blur-sm ${
+                  isPublic
+                    ? "border-emerald-400/30 bg-emerald-500/15 text-emerald-300"
+                    : "border-white/15 bg-black/30 text-slate-300"
                 }`}
               >
                 {isPublic ? <Globe className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
                 {isPublic ? "Public" : "Private"}
-              </div>
+              </span>
               {trip.tags?.slice(0, 3).map((tag) => (
-                <div
-                  key={tag}
-                  className="px-3 py-1 rounded-full text-xs glass text-slate-300"
-                >
+                <span key={tag} className="px-3 py-1 rounded-full text-xs text-slate-200 border border-white/15 bg-black/20 backdrop-blur-sm">
                   {tag}
-                </div>
+                </span>
               ))}
             </div>
 
@@ -260,29 +272,29 @@ export default function TripPage({
             </h1>
 
             <div className="flex flex-wrap items-center gap-4 text-sm text-slate-300">
-              <div className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1.5">
                 <MapPin className="w-4 h-4 text-blue-400" />
                 {trip.destinations?.join(" → ")}
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Clock className="w-4 h-4 text-purple-400" />
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-violet-400" />
                 {trip.totalDays} days
-              </div>
+              </span>
               {trip.budget && (
-                <div className="flex items-center gap-1.5">
-                  <DollarSign className="w-4 h-4 text-yellow-400" />
+                <span className="flex items-center gap-1.5">
+                  <DollarSign className="w-4 h-4 text-amber-400" />
                   {trip.budget}
-                </div>
+                </span>
               )}
-              <div className="flex items-center gap-1.5">
-                <Calendar className="w-4 h-4 text-orange-400" />
+              <span className="flex items-center gap-1.5">
+                <Calendar className="w-4 h-4 text-emerald-400" />
                 {formatDate(trip.createdAt)}
-              </div>
+              </span>
               {trip.saves > 0 && (
-                <div className="flex items-center gap-1.5">
+                <span className="flex items-center gap-1.5">
                   <Heart className="w-4 h-4 fill-red-400 text-red-400" />
                   {trip.saves} saves
-                </div>
+                </span>
               )}
             </div>
           </div>
@@ -294,7 +306,7 @@ export default function TripPage({
             <div className="relative">
               <button
                 onClick={() => setShowSettings(!showSettings)}
-                className="p-2.5 glass rounded-xl text-slate-300 hover:text-white transition-colors"
+                className="p-2.5 rounded-xl border border-white/20 bg-black/30 text-white backdrop-blur-sm hover:bg-black/50 transition-colors"
               >
                 <Settings className="w-5 h-5" />
               </button>
@@ -304,27 +316,28 @@ export default function TripPage({
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 8 }}
-                    className="absolute right-0 mt-2 w-48 glass rounded-xl border border-white/10 shadow-2xl overflow-hidden z-50"
+                    className="absolute right-0 mt-2 w-48 rounded-xl border border-slate-200 bg-white shadow-xl overflow-hidden z-50"
                   >
                     <button
                       onClick={togglePublic}
                       disabled={togglingPublic}
-                      className="w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-300 hover:bg-white/5 text-left"
+                      className="w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 text-left"
                     >
-                      {isPublic ? <Lock className="w-4 h-4" /> : <Globe className="w-4 h-4" />}
+                      {isPublic ? <Lock className="w-4 h-4 text-slate-400" /> : <Globe className="w-4 h-4 text-slate-400" />}
                       {isPublic ? "Make Private" : "Make Public"}
                     </button>
                     <button
                       onClick={shareTrip}
-                      className="w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-300 hover:bg-white/5 text-left"
+                      className="w-full flex items-center gap-2 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 text-left"
                     >
-                      <Share2 className="w-4 h-4" />
+                      <Share2 className="w-4 h-4 text-slate-400" />
                       Copy Link
                     </button>
+                    <div className="border-t border-slate-100" />
                     <button
                       onClick={deleteTrip}
                       disabled={deleting}
-                      className="w-full flex items-center gap-2 px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 text-left"
+                      className="w-full flex items-center gap-2 px-4 py-3 text-sm text-red-500 hover:bg-red-50 text-left"
                     >
                       <Trash2 className="w-4 h-4" />
                       Delete Trip
@@ -339,13 +352,9 @@ export default function TripPage({
                 <button
                   onClick={handleSave}
                   disabled={saving}
-                  className="p-2.5 glass rounded-xl text-slate-300 hover:text-white transition-colors"
+                  className="p-2.5 rounded-xl border border-white/20 bg-black/30 text-white backdrop-blur-sm hover:bg-black/50 transition-colors"
                 >
-                  <Heart
-                    className={`w-5 h-5 ${
-                      isSaved ? "fill-red-500 text-red-500" : ""
-                    }`}
-                  />
+                  <Heart className={`w-5 h-5 ${isSaved ? "fill-red-400 text-red-400" : ""}`} />
                 </button>
               )}
               <Button
@@ -362,60 +371,56 @@ export default function TripPage({
         </div>
       </div>
 
-      {/* Main Layout */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-12">
-        {/* Owner info */}
-        <div className="flex items-center gap-3 py-4 border-b border-white/5 mb-6">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-sm font-bold text-white">
-            {(trip.owner as { name: string })?.name?.[0]?.toUpperCase()}
-          </div>
-          <div>
-            <p className="text-sm font-medium text-white">
-              {(trip.owner as { name: string })?.name}
-            </p>
-            <p className="text-xs text-slate-500">Trip creator</p>
-          </div>
-          {trip.originalTrip && (
-            <div className="ml-auto flex items-center gap-1.5 text-xs text-slate-500 glass px-3 py-1.5 rounded-full">
-              <Copy className="w-3 h-3" />
-              Cloned trip
-            </div>
-          )}
-        </div>
-
-        {/* Tab bar */}
-        <div className="flex gap-1 p-1 glass rounded-xl mb-6 w-fit">
-          {[
-            { id: "itinerary" as Tab, icon: <List className="w-4 h-4" />, label: "Itinerary" },
-            { id: "map" as Tab, icon: <Map className="w-4 h-4" />, label: "Map" },
-            { id: "chat" as Tab, icon: <MessageSquare className="w-4 h-4" />, label: "AI Chat", ownerOnly: true },
-          ]
-            .filter((t) => !t.ownerOnly || isOwner)
-            .map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  tab === t.id
-                    ? "bg-blue-600 text-white shadow-lg"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                {t.icon}
-                {t.label}
-                {t.id === "chat" && chatHistory.length > 0 && (
-                  <span className="w-4 h-4 rounded-full bg-blue-400/20 text-blue-300 text-xs flex items-center justify-center">
-                    {chatHistory.filter((m) => m.role === "user").length}
-                  </span>
-                )}
-              </button>
-            ))}
-        </div>
-
-        {/* Content */}
+      {/* ── Main Layout ── */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-12 pt-6">
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Left Panel */}
-          <div className="lg:col-span-2">
+
+          {/* ── Left: Main Content ── */}
+          <div className="lg:col-span-2 space-y-4">
+
+            {/* Owner info */}
+            <div className="flex items-center gap-3 bg-white rounded-2xl border border-slate-200 px-4 py-3 shadow-sm">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center text-sm font-bold text-white shrink-0">
+                {(trip.owner as { name: string })?.name?.[0]?.toUpperCase()}
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-slate-900">
+                  {(trip.owner as { name: string })?.name}
+                </p>
+                <p className="text-xs text-slate-500">Trip creator</p>
+              </div>
+              {trip.originalTrip && (
+                <div className="flex items-center gap-1.5 text-xs text-slate-500 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-full">
+                  <Copy className="w-3 h-3" />
+                  Cloned trip
+                </div>
+              )}
+            </div>
+
+            {/* Tab bar */}
+            <div className="flex gap-1 p-1 bg-white rounded-xl border border-slate-200 shadow-sm w-fit">
+              {NAV_TABS.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    tab === t.id
+                      ? "bg-blue-600 text-white shadow-md"
+                      : "text-slate-500 hover:text-slate-900 hover:bg-slate-50"
+                  }`}
+                >
+                  {t.icon}
+                  {t.label}
+                  {t.id === "chat" && chatHistory.length > 0 && (
+                    <span className="w-4 h-4 rounded-full bg-blue-100 text-blue-600 text-xs flex items-center justify-center font-bold">
+                      {chatHistory.filter((m) => m.role === "user").length}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Content area */}
             <AnimatePresence mode="wait">
               {tab === "itinerary" && (
                 <motion.div
@@ -423,68 +428,71 @@ export default function TripPage({
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
+                  className="space-y-4"
                 >
                   {/* Day selector */}
-                  <div className="flex gap-2 overflow-x-auto pb-2 mb-6 scrollbar-none">
-                    {trip.days?.map((day) => (
-                      <button
-                        key={day.day}
-                        onClick={() => setSelectedDay(day.day)}
-                        className={`flex-shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
-                          selectedDay === day.day
-                            ? "bg-blue-600 border-blue-500 text-white"
-                            : "bg-white/5 border-white/10 text-slate-400 hover:text-white hover:border-white/20"
-                        }`}
-                      >
-                        Day {day.day}
-                      </button>
-                    ))}
+                  <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+                    {trip.days?.map((day) => {
+                      const colorClass = DAY_COLORS[(day.day - 1) % DAY_COLORS.length];
+                      return (
+                        <button
+                          key={day.day}
+                          onClick={() => setSelectedDay(day.day)}
+                          className={`flex-shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
+                            selectedDay === day.day
+                              ? `${colorClass} border-transparent text-white shadow-md`
+                              : "bg-white border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 shadow-sm"
+                          }`}
+                        >
+                          Day {day.day}
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {currentDay && (
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       {/* Day header */}
-                      <div className="glass rounded-2xl p-5 border border-white/5">
-                        <h2 className="text-xl font-display font-bold text-white mb-2">
+                      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                        <h2 className="text-xl font-display font-bold text-slate-900 mb-2">
                           Day {currentDay.day}: {currentDay.title}
                         </h2>
-                        <p className="text-slate-400 text-sm leading-relaxed">
+                        <p className="text-slate-500 text-sm leading-relaxed">
                           {currentDay.description}
                         </p>
                       </div>
 
-                      {/* Places */}
-                      {currentDay.places?.map((place: Place, i: number) => (
-                        <motion.div
-                          key={place.id || i}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: i * 0.05 }}
-                          onClick={() => setSelectedPlace(place)}
-                          className={`glass rounded-2xl p-5 border cursor-pointer transition-all ${
-                            selectedPlace?.id === place.id
-                              ? "border-blue-500/50 bg-blue-500/5"
-                              : "border-white/5 hover:border-white/15"
-                          }`}
-                        >
-                          <div className="flex items-start gap-4">
-                            {/* Index badge */}
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
+                      {/* Timeline of places */}
+                      <div className="relative space-y-0">
+                        {/* Timeline line */}
+                        <div className="absolute left-9 top-0 bottom-0 w-px bg-slate-200" style={{ left: '36px' }} />
+
+                        {currentDay.places?.map((place: Place, i: number) => (
+                          <motion.div
+                            key={place.id || i}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: i * 0.05 }}
+                            onClick={() => setSelectedPlace(place)}
+                            className="relative flex gap-4 pb-3 cursor-pointer"
+                          >
+                            {/* Timeline dot */}
+                            <div className={`relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white shadow-md ${
+                              DAY_COLORS[(selectedDay - 1) % DAY_COLORS.length]
+                            }`}>
                               {i + 1}
                             </div>
 
-                            <div className="flex-1 min-w-0">
+                            {/* Card */}
+                            <div className={`flex-1 rounded-2xl border bg-white p-4 shadow-sm transition-all ${
+                              selectedPlace?.id === place.id
+                                ? "border-blue-300 bg-blue-50/50 shadow-md shadow-blue-100"
+                                : "border-slate-200 hover:border-slate-300 hover:shadow-md"
+                            }`}>
                               <div className="flex items-start justify-between gap-2 mb-2">
                                 <div>
-                                  <h3 className="font-semibold text-white text-base">
-                                    {place.name}
-                                  </h3>
-                                  <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                    <span
-                                      className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border ${
-                                        PLACE_TYPE_COLORS[place.type]
-                                      }`}
-                                    >
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border ${PLACE_TYPE_COLORS[place.type]}`}>
                                       {PLACE_TYPE_ICONS[place.type]}
                                       {place.type}
                                     </span>
@@ -495,63 +503,63 @@ export default function TripPage({
                                       </span>
                                     )}
                                     {place.rating && (
-                                      <span className="text-xs text-yellow-400">
+                                      <span className="text-xs text-amber-500 font-medium">
                                         ⭐ {place.rating}
                                       </span>
                                     )}
                                   </div>
+                                  <h3 className="font-semibold text-slate-900 text-base leading-tight">
+                                    {place.name}
+                                  </h3>
                                 </div>
                                 <a
                                   href={`https://www.openstreetmap.org/?mlat=${place.coordinates[0]}&mlon=${place.coordinates[1]}&zoom=16`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   onClick={(e) => e.stopPropagation()}
-                                  className="p-2 text-slate-500 hover:text-blue-400 transition-colors flex-shrink-0"
+                                  className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
                                   title="View on OpenStreetMap"
                                 >
                                   <Navigation className="w-4 h-4" />
                                 </a>
                               </div>
 
-                              <p className="text-slate-400 text-sm leading-relaxed mb-3">
+                              <p className="text-slate-500 text-sm leading-relaxed mb-2">
                                 {place.description}
                               </p>
 
                               {place.tips && (
-                                <div className="text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2">
+                                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-2">
                                   💡 {place.tips}
                                 </div>
                               )}
 
                               {place.address && (
-                                <p className="text-xs text-slate-600 mt-2 flex items-center gap-1">
+                                <p className="text-xs text-slate-400 flex items-center gap-1">
                                   <MapPin className="w-3 h-3" />
                                   {place.address}
                                 </p>
                               )}
                             </div>
-                          </div>
-                        </motion.div>
-                      ))}
+                          </motion.div>
+                        ))}
+                      </div>
 
                       {/* Route info */}
                       {currentDay.routes && currentDay.routes.length > 0 && (
-                        <div className="glass rounded-2xl p-5 border border-white/5">
-                          <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
-                            <Navigation className="w-4 h-4 text-blue-400" />
+                        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                          <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2 text-sm">
+                            <Route className="w-4 h-4 text-blue-500" />
                             Day Routes
                           </h3>
-                          <div className="space-y-3">
+                          <div className="space-y-2">
                             {currentDay.routes.map((route, i) => (
-                              <div
-                                key={i}
-                                className="flex items-center gap-3 text-sm"
-                              >
-                                <div className="w-2 h-2 rounded-full bg-blue-400 flex-shrink-0" />
-                                <span className="text-slate-300 truncate">
+                              <div key={i} className="flex items-center gap-3 text-sm py-1.5 border-b border-slate-50 last:border-0">
+                                <div className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
+                                <span className="text-slate-700 truncate flex-1">
                                   {route.from} → {route.to}
                                 </span>
-                                <span className="text-slate-500 ml-auto flex-shrink-0">
+                                <span className="text-slate-400 shrink-0 text-xs">
                                   {route.distance} · {route.duration}
                                 </span>
                               </div>
@@ -560,7 +568,7 @@ export default function TripPage({
                         </div>
                       )}
 
-                      {/* Day nav */}
+                      {/* Day navigation */}
                       <div className="flex gap-3">
                         {selectedDay > 1 && (
                           <Button
@@ -596,7 +604,7 @@ export default function TripPage({
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="h-[70vh] rounded-2xl overflow-hidden"
+                  className="h-[70vh] rounded-2xl overflow-hidden shadow-sm"
                 >
                   <TripMap
                     trip={trip}
@@ -627,11 +635,11 @@ export default function TripPage({
             </AnimatePresence>
           </div>
 
-          {/* Right Sidebar */}
+          {/* ── Right Sidebar ── */}
           <div className="space-y-4">
-            {/* Mini Map (always visible on itinerary/chat tab) */}
+            {/* Map panel (always visible on itinerary/chat tab) */}
             {tab !== "map" && (
-              <div className="h-64 rounded-2xl overflow-hidden">
+              <div className="rounded-2xl overflow-hidden shadow-sm" style={{ height: '260px' }}>
                 <TripMap
                   trip={trip}
                   selectedDay={selectedDay}
@@ -645,28 +653,31 @@ export default function TripPage({
             )}
 
             {/* Trip Stats */}
-            <div className="glass rounded-2xl p-5 border border-white/5 space-y-3">
-              <h3 className="font-semibold text-white text-sm">Trip Stats</h3>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-slate-500 text-xs">Duration</span>
-                  <span className="text-white font-medium">{trip.totalDays} days</span>
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-3">
+              <h3 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-blue-500" />
+                Trip Stats
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+                  <span className="text-xs text-slate-500 block mb-1">Duration</span>
+                  <span className="text-slate-900 font-semibold">{trip.totalDays} days</span>
                 </div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-slate-500 text-xs">Places</span>
-                  <span className="text-white font-medium">
+                <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+                  <span className="text-xs text-slate-500 block mb-1">Places</span>
+                  <span className="text-slate-900 font-semibold">
                     {trip.days?.reduce((sum, d) => sum + (d.places?.length || 0), 0) || 0}
                   </span>
                 </div>
                 {trip.totalDistance && (
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-slate-500 text-xs">Distance</span>
-                    <span className="text-white font-medium">{trip.totalDistance}</span>
+                  <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+                    <span className="text-xs text-slate-500 block mb-1">Distance</span>
+                    <span className="text-slate-900 font-semibold">{trip.totalDistance}</span>
                   </div>
                 )}
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-slate-500 text-xs">Budget</span>
-                  <span className="text-white font-medium capitalize">{trip.budget}</span>
+                <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+                  <span className="text-xs text-slate-500 block mb-1">Budget</span>
+                  <span className="text-slate-900 font-semibold capitalize">{trip.budget}</span>
                 </div>
               </div>
             </div>
@@ -676,32 +687,28 @@ export default function TripPage({
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="glass rounded-2xl p-5 border border-blue-500/20 bg-blue-500/5"
+                className="bg-blue-50 rounded-2xl border border-blue-200 p-5 shadow-sm"
               >
                 <div className="flex items-start justify-between mb-2">
-                  <h3 className="font-semibold text-white text-sm flex-1">
+                  <h3 className="font-semibold text-slate-900 text-sm flex-1">
                     {selectedPlace.name}
                   </h3>
                   <button
                     onClick={() => setSelectedPlace(null)}
-                    className="text-slate-500 hover:text-white text-xs ml-2"
+                    className="text-slate-400 hover:text-slate-700 text-xs ml-2 p-1"
                   >
                     ✕
                   </button>
                 </div>
-                <span
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border mb-2 ${
-                    PLACE_TYPE_COLORS[selectedPlace.type]
-                  }`}
-                >
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border mb-2 ${PLACE_TYPE_COLORS[selectedPlace.type]}`}>
                   {PLACE_TYPE_ICONS[selectedPlace.type]}
                   {selectedPlace.type}
                 </span>
-                <p className="text-slate-400 text-xs leading-relaxed">
+                <p className="text-slate-600 text-xs leading-relaxed mb-2">
                   {selectedPlace.description}
                 </p>
                 {selectedPlace.tips && (
-                  <div className="mt-2 text-xs text-yellow-400">
+                  <div className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1.5 mb-2">
                     💡 {selectedPlace.tips}
                   </div>
                 )}
@@ -709,7 +716,7 @@ export default function TripPage({
                   href={`https://www.openstreetmap.org/?mlat=${selectedPlace.coordinates[0]}&mlon=${selectedPlace.coordinates[1]}&zoom=16`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-3 flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300"
+                  className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium"
                 >
                   <Navigation className="w-3 h-3" />
                   View on OpenStreetMap
@@ -718,7 +725,7 @@ export default function TripPage({
             )}
 
             {/* Actions */}
-            <div className="glass rounded-2xl p-4 border border-white/5 space-y-2">
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-2">
               {!isOwner && session && (
                 <>
                   <Button
@@ -763,6 +770,29 @@ export default function TripPage({
                 >
                   {isPublic ? "Make Private" : "Make Public"}
                 </Button>
+              )}
+            </div>
+
+            {/* AI Insight panel */}
+            <div className="bg-gradient-to-br from-blue-600 to-violet-600 rounded-2xl p-5 text-white shadow-lg shadow-blue-500/20">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="w-4 h-4" />
+                <span className="text-sm font-semibold">AI Insight</span>
+              </div>
+              <p className="text-sm text-blue-100 leading-relaxed mb-3">
+                This trip covers {trip.days?.reduce((s, d) => s + (d.places?.length || 0), 0) || 0} places
+                over {trip.totalDays} days.
+                {trip.totalDistance && ` Total route: ${trip.totalDistance}.`}
+                {" "}Chat with AI to refine any part of your itinerary!
+              </p>
+              {isOwner && (
+                <button
+                  onClick={() => setTab("chat")}
+                  className="flex items-center gap-2 rounded-xl bg-white/20 px-3 py-2 text-xs font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/30"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  Open AI Chat
+                </button>
               )}
             </div>
           </div>

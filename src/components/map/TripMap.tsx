@@ -27,6 +27,30 @@ const PLACE_ICONS: Record<Place["type"], string> = {
   activity: "⚡",
 };
 
+// ── Outlier coordinate filter ─────────────────────────────────────────
+// When the LLM hallucinates a coordinate (e.g. puts one pin in Ireland while
+// the rest are in Sri Lanka), fitBounds zooms out to show both continents and
+// the map appears blank. Fix: discard any place whose lat or lng is more than
+// 30 degrees from the median of all places in that day.
+function filterCoordinateOutliers(places: Place[]): Place[] {
+  if (places.length <= 2) return places;
+
+  const sorted = (arr: number[]) => [...arr].sort((a, b) => a - b);
+  const median = (arr: number[]) => {
+    const s = sorted(arr);
+    const mid = Math.floor(s.length / 2);
+    return s.length % 2 !== 0 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+  };
+
+  const medLat = median(places.map((p) => p.coordinates[0]));
+  const medLng = median(places.map((p) => p.coordinates[1]));
+
+  return places.filter((p) => {
+    const [lat, lng] = p.coordinates;
+    return Math.abs(lat - medLat) <= 30 && Math.abs(lng - medLng) <= 30;
+  });
+}
+
 // ── OSRM road-routing (free, no API key) ─────────────────────────────
 interface RouteSegment {
   from: Place;
@@ -110,12 +134,14 @@ function MapSkeleton({ className }: { className?: string }) {
 
 // ── Main component ────────────────────────────────────────────────────
 export default function TripMap({ trip, selectedDay, onPlaceSelect, className = "" }: TripMapProps) {
-  const mapRef       = useRef<HTMLDivElement>(null);
-  const leafletMap   = useRef<L.Map | null>(null);
-  const markerLayer  = useRef<L.LayerGroup | null>(null);
-  const routeLayer   = useRef<L.LayerGroup | null>(null);
+  const mapRef        = useRef<HTMLDivElement>(null);
+  const leafletMap    = useRef<L.Map | null>(null);
+  const markerLayer   = useRef<L.LayerGroup | null>(null);
+  const routeLayer    = useRef<L.LayerGroup | null>(null);
+  const resizeObserver = useRef<ResizeObserver | null>(null);
 
   const [isClient, setIsClient]       = useState(false);
+  const [mapReady, setMapReady]       = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [routeSegments, setRouteSegments] = useState<RouteSegment[]>([]);
   const [routeLoading, setRouteLoading]   = useState(false);
@@ -154,18 +180,36 @@ export default function TripMap({ trip, selectedDay, onPlaceSelect, className = 
       markerLayer.current = L.layerGroup().addTo(map);
       routeLayer.current  = L.layerGroup().addTo(map);
       leafletMap.current  = map;
+
+      // Fix split tiles: Leaflet measures the container before CSS gives it
+      // its final height. Wait one paint frame then invalidate + mark ready.
+      setTimeout(() => {
+        map.invalidateSize();
+        setMapReady(true);
+      }, 150);
+
+      // Re-invalidate whenever the container is resized (tab switches, etc.)
+      if (mapRef.current) {
+        resizeObserver.current = new ResizeObserver(() => {
+          leafletMap.current?.invalidateSize();
+        });
+        resizeObserver.current.observe(mapRef.current);
+      }
     };
 
     init();
     return () => {
+      resizeObserver.current?.disconnect();
+      resizeObserver.current = null;
       leafletMap.current?.remove();
       leafletMap.current = null;
+      setMapReady(false);
     };
   }, [isClient]);
 
   // ── Render markers & routes when trip/day changes ──────────────────
   const renderMap = useCallback(async () => {
-    if (!isClient || !leafletMap.current || !markerLayer.current) return;
+    if (!isClient || !mapReady || !leafletMap.current || !markerLayer.current) return;
 
     const L = (await import("leaflet")).default;
     markerLayer.current!.clearLayers();
@@ -182,16 +226,18 @@ export default function TripMap({ trip, selectedDay, onPlaceSelect, className = 
 
     for (const day of daysToShow) {
       const color   = DAY_COLORS[(day.day - 1) % DAY_COLORS.length];
-      const places  = (day.places ?? []).filter((p) => {
+      const validCoords = (day.places ?? []).filter((p) => {
         if (!Array.isArray(p.coordinates) || p.coordinates.length !== 2) return false;
         const [lat, lng] = p.coordinates;
-        // Exclude null island (0,0) and out-of-range coords from failed geocoding
         return typeof lat === "number" && typeof lng === "number"
           && !isNaN(lat) && !isNaN(lng)
           && !(lat === 0 && lng === 0)
           && lat >= -90 && lat <= 90
           && lng >= -180 && lng <= 180;
       });
+      // Remove geographic outliers (e.g. one pin in a different country due to
+      // LLM hallucination that slipped past geocoding).
+      const places = filterCoordinateOutliers(validCoords);
 
       // Add numbered markers
       places.forEach((place, idx) => {
@@ -367,7 +413,7 @@ export default function TripMap({ trip, selectedDay, onPlaceSelect, className = 
       leafletMap.current!.fitBounds(bounds, { padding: [50, 50] });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trip, selectedDay, isClient, onPlaceSelect, routeMode]);
+  }, [trip, selectedDay, isClient, mapReady, onPlaceSelect, routeMode]);
 
   useEffect(() => { renderMap(); }, [renderMap]);
 
@@ -375,10 +421,15 @@ export default function TripMap({ trip, selectedDay, onPlaceSelect, className = 
   const totalDistanceKm = routeSegments.reduce((s, r) => s + r.distanceKm, 0);
   const totalDurationMin = routeSegments.reduce((s, r) => s + r.durationMin, 0);
 
-  const allPlacesForDay = (trip.days ?? [])
-    .filter((d) => selectedDay === undefined || d.day === selectedDay)
-    .flatMap((d) => d.places ?? [])
-    .filter((p) => p.coordinates?.length === 2);
+  const allPlacesForDay = filterCoordinateOutliers(
+    (trip.days ?? [])
+      .filter((d) => selectedDay === undefined || d.day === selectedDay)
+      .flatMap((d) => d.places ?? [])
+      .filter((p) =>
+        Array.isArray(p.coordinates) && p.coordinates.length === 2
+        && !(p.coordinates[0] === 0 && p.coordinates[1] === 0)
+      )
+  );
 
   // Google Maps multi-stop URL for the full day route
   const fullDayGmapsUrl = (() => {
@@ -388,7 +439,7 @@ export default function TripMap({ trip, selectedDay, onPlaceSelect, className = 
     const waypts  = allPlacesForDay
       .slice(1, -1)
       .map((p) => p.coordinates.join(","))
-      .join("|");
+      .join("/");
     return `https://www.google.com/maps/dir/${origin}/${waypts ? waypts + "/" : ""}${dest}`;
   })();
 

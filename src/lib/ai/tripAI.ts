@@ -11,11 +11,14 @@
 import { TripFormData, Trip, Place, ChatMessage } from "@/types";
 
 // ── Provider config ──────────────────────────────────────────────────────────
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const OLLAMA_BASE_URL   = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
-const OLLAMA_MODEL      = process.env.OLLAMA_MODEL    || "qwen2.5:7b";
+const ANTHROPIC_API_KEY    = process.env.ANTHROPIC_API_KEY;
+const OPENROUTER_API_KEY   = process.env.OPENROUTER_API_KEY;
+const OPENROUTER_MODEL     = process.env.OPENROUTER_MODEL || "qwen/qwen3-235b-a22b:free";
+const OLLAMA_BASE_URL      = process.env.OLLAMA_BASE_URL  || "http://localhost:11434";
+const OLLAMA_MODEL         = process.env.OLLAMA_MODEL     || "qwen2.5:7b";
 
-const USE_CLAUDE = Boolean(ANTHROPIC_API_KEY);
+const USE_CLAUDE      = Boolean(ANTHROPIC_API_KEY);
+const USE_OPENROUTER  = !USE_CLAUDE && Boolean(OPENROUTER_API_KEY);
 
 // ── System prompt ────────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `You are TripGo AI, an expert travel planner that creates detailed, personalized trip itineraries.
@@ -78,7 +81,7 @@ STRICT RULES:
 11. Return ONLY the JSON object — absolutely no text before or after it
 12. All string values must be properly escaped — no unescaped quotes or newlines`;
 
-// ── LLM caller — routes to Claude or Ollama ─────────────────────────────────
+// ── LLM caller — routes to Claude → OpenRouter → Ollama ─────────────────────
 async function llmChat(
   system: string,
   messages: Array<{ role: "user" | "assistant"; content: string }>,
@@ -86,6 +89,9 @@ async function llmChat(
 ): Promise<string> {
   if (USE_CLAUDE) {
     return claudeChat(system, messages, opts);
+  }
+  if (USE_OPENROUTER) {
+    return openRouterChat(system, messages, opts);
   }
   return ollamaChat(system, messages, {
     temperature: opts.temperature,
@@ -115,6 +121,59 @@ async function claudeChat(
 
   const textBlock = response.content.find((b) => b.type === "text");
   return textBlock?.text ?? "";
+}
+
+// ── OpenRouter API (OpenAI-compatible) ───────────────────────────────────────
+async function openRouterChat(
+  system: string,
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+  opts: { temperature?: number; maxTokens?: number } = {}
+): Promise<string> {
+  const MAX_RETRIES = 4;
+  const BASE_DELAY  = 8_000; // 8 s — free-tier rate limits reset quickly
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+        "HTTP-Referer": "https://github.com/kbimsara/tripGo",
+        "X-Title": "TripGo",
+      },
+      body: JSON.stringify({
+        model: OPENROUTER_MODEL,
+        messages: [{ role: "system", content: system }, ...messages],
+        max_tokens: opts.maxTokens ?? 8192,
+        temperature: opts.temperature ?? 0.4,
+      }),
+      signal: AbortSignal.timeout(300_000),
+    });
+
+    // Rate-limited — wait and retry with exponential backoff
+    if (res.status === 429) {
+      if (attempt === MAX_RETRIES) {
+        throw new Error(
+          "OpenRouter rate limit: free tier is busy. Please wait a moment and try again."
+        );
+      }
+      const delay = BASE_DELAY * Math.pow(2, attempt); // 8s, 16s, 32s, 64s
+      console.warn(`[TripGo] OpenRouter 429 — retrying in ${delay / 1000}s (attempt ${attempt + 1}/${MAX_RETRIES})`);
+      await new Promise((r) => setTimeout(r, delay));
+      continue;
+    }
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => res.statusText);
+      throw new Error(`OpenRouter ${res.status}: ${body}`);
+    }
+
+    const data = await res.json();
+    return (data.choices?.[0]?.message?.content as string) ?? "";
+  }
+
+  // Should never reach here
+  throw new Error("OpenRouter: max retries exceeded");
 }
 
 // ── Ollama local LLM ────────────────────────────────────────────────────────
@@ -149,15 +208,27 @@ async function ollamaChat(
   return (data.message?.content as string) ?? "";
 }
 
+// ── Strip <think> blocks (Qwen3 / reasoning models emit these) ───────────────
+function stripThinkingTags(text: string): string {
+  // Remove <think>...</think> blocks (may span multiple lines)
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+}
+
 // ── JSON extractor + repair ─────────────────────────────────────────────────
 function extractJSON(raw: string): string {
+  // Remove reasoning blocks FIRST — Qwen3 thinks in <think> tags that often
+  // contain { } characters, which would fool indexOf("{") into grabbing the
+  // wrong position and producing corrupted coordinates.
+  let text = stripThinkingTags(raw);
+
   // Strip markdown fences
-  let text = raw
+  text = text
     .replace(/^```(?:json)?\s*/gm, "")
     .replace(/\s*```\s*$/gm, "")
     .trim();
 
-  // Extract the outermost JSON object
+  // Extract the outermost JSON object by finding the last balanced } that
+  // closes the first {. Using lastIndexOf is good enough for a single object.
   const start = text.indexOf("{");
   const end   = text.lastIndexOf("}");
   if (start !== -1 && end > start) text = text.slice(start, end + 1);
@@ -441,11 +512,15 @@ I've added the Tsukiji Outer Market as a morning food stop on Day 2!
     content: m.content,
   }));
 
-  const raw = await llmChat(
+  const rawLlm = await llmChat(
     system,
     [...history, { role: "user", content: userMessage }],
     { maxTokens: 8192, temperature: 0.5 }
   );
+
+  // Strip reasoning blocks before any parsing — Qwen3 <think> tags may
+  // contain separator strings or { } chars that break the split logic.
+  const raw = stripThinkingTags(rawLlm);
 
   // Try multiple separator patterns (models are unreliable with exact markers)
   const separators = [

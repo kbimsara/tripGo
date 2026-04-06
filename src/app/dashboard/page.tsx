@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Plus, Globe, Lock, Map, Clock, Sparkles, Trash2 } from "lucide-react";
+import { Plus, Globe, Lock, Map, Clock, Sparkles, Trash2, TrendingUp } from "lucide-react";
 import Navbar from "@/components/ui/Navbar";
 import TripCard from "@/components/trip/TripCard";
 import Button from "@/components/ui/Button";
@@ -11,14 +11,14 @@ import Link from "next/link";
 import { Trip } from "@/types";
 
 const STATS_CONFIG = [
-  { key: "total",     label: "Total Trips",   icon: <Map className="h-5 w-5" />,   color: "from-blue-500 to-blue-600"    },
-  { key: "public",    label: "Public",        icon: <Globe className="h-5 w-5" />, color: "from-emerald-500 to-emerald-600" },
-  { key: "private",   label: "Private",       icon: <Lock className="h-5 w-5" />,  color: "from-violet-500 to-violet-600" },
-  { key: "totalDays", label: "Days Planned",  icon: <Clock className="h-5 w-5" />, color: "from-orange-500 to-orange-600" },
+  { key: "total",     label: "Total Trips",   icon: <Map className="h-5 w-5" />,         color: "bg-blue-50 text-blue-600 border-blue-100"    },
+  { key: "public",    label: "Public",        icon: <Globe className="h-5 w-5" />,       color: "bg-emerald-50 text-emerald-600 border-emerald-100" },
+  { key: "private",   label: "Private",       icon: <Lock className="h-5 w-5" />,        color: "bg-violet-50 text-violet-600 border-violet-100" },
+  { key: "totalDays", label: "Days Planned",  icon: <Clock className="h-5 w-5" />,       color: "bg-orange-50 text-orange-600 border-orange-100" },
 ];
 
 function SkeletonCard() {
-  return <div className="h-72 rounded-2xl bg-white/5 shimmer" />;
+  return <div className="h-72 rounded-2xl bg-slate-100 shimmer" />;
 }
 
 export default function DashboardPage() {
@@ -56,11 +56,11 @@ export default function DashboardPage() {
 
   if (status === "loading") {
     return (
-      <div className="animated-gradient min-h-screen">
+      <div className="min-h-screen bg-slate-50">
         <Navbar />
         <div className="mx-auto max-w-7xl px-6 pt-24">
           <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
-            {[...Array(4)].map((_, i) => <div key={i} className="h-24 rounded-2xl shimmer bg-white/5" />)}
+            {[...Array(4)].map((_, i) => <div key={i} className="h-24 rounded-2xl shimmer bg-slate-100" />)}
           </div>
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {[...Array(6)].map((_, i) => <SkeletonCard key={i} />)}
@@ -71,7 +71,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="animated-gradient min-h-screen">
+    <div className="min-h-screen bg-slate-50">
       <Navbar />
 
       <div className="mx-auto max-w-7xl px-4 pb-20 pt-24 sm:px-6">
@@ -82,23 +82,19 @@ export default function DashboardPage() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
         >
-          <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-violet-600 text-2xl font-bold text-white shadow-lg shadow-blue-500/20">
-              {session?.user?.name?.[0]?.toUpperCase()}
-            </div>
-            <div>
-              <h1
-                style={{ fontFamily: "'Playfair Display', serif" }}
-                className="text-2xl font-bold text-white"
-              >
-                My Trips
-              </h1>
-              <p className="text-sm text-slate-400">{session?.user?.email}</p>
-            </div>
+          <div>
+            <h1 className="font-display text-3xl font-bold text-slate-900 mb-1">
+              My Trips
+            </h1>
+            <p className="text-slate-500">
+              {trips.length > 0
+                ? `You have ${trips.length} adventure${trips.length !== 1 ? "s" : ""} planned.`
+                : "Start planning your first adventure!"}
+            </p>
           </div>
           <Link href="/trip/new">
             <Button size="lg" icon={<Plus className="h-5 w-5" />} className="shadow-lg shadow-blue-500/20">
-              New Trip
+              Start New Trip
             </Button>
           </Link>
         </motion.div>
@@ -111,11 +107,11 @@ export default function DashboardPage() {
           className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4"
         >
           {STATS_CONFIG.map((s) => (
-            <div key={s.key} className="glass rounded-2xl border border-white/8 p-5">
-              <div className={`mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${s.color} text-white shadow`}>
+            <div key={s.key} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+              <div className={`mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl border ${s.color}`}>
                 {s.icon}
               </div>
-              <div className="text-2xl font-bold text-white">
+              <div className="text-2xl font-bold text-slate-900">
                 {stats[s.key as keyof typeof stats]}
               </div>
               <div className="mt-0.5 text-xs text-slate-500">{s.label}</div>
@@ -134,11 +130,11 @@ export default function DashboardPage() {
             animate={{ opacity: 1 }}
             className="flex flex-col items-center justify-center py-24 text-center"
           >
-            <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-2xl border border-blue-500/20 bg-blue-500/10">
-              <Sparkles className="h-10 w-10 text-blue-400" />
+            <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-2xl border border-blue-100 bg-blue-50">
+              <Sparkles className="h-10 w-10 text-blue-500" />
             </div>
-            <h3 className="mb-2 text-xl font-semibold text-white">No trips yet</h3>
-            <p className="mb-8 max-w-xs text-slate-400">
+            <h3 className="mb-2 text-xl font-semibold text-slate-900">No trips yet</h3>
+            <p className="mb-8 max-w-xs text-slate-500">
               Let AI design your first perfect trip. Just tell us where you want to go!
             </p>
             <Link href="/trip/new">
@@ -156,12 +152,12 @@ export default function DashboardPage() {
                 className="group relative"
               >
                 <TripCard trip={trip} />
-                {/* Delete overlay */}
+                {/* Delete button */}
                 <button
                   onClick={() => handleDelete(trip._id)}
                   disabled={deleting === trip._id}
                   title="Delete trip"
-                  className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-lg bg-red-500/80 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-500 disabled:cursor-wait"
+                  className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-lg bg-red-500 text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 hover:bg-red-600 disabled:cursor-wait"
                 >
                   {deleting === trip._id
                     ? <div className="h-3.5 w-3.5 animate-spin rounded-full border border-white/30 border-t-white" />
@@ -177,19 +173,55 @@ export default function DashboardPage() {
               transition={{ delay: trips.length * 0.04 }}
             >
               <Link href="/trip/new">
-                <div className="flex min-h-64 flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-white/10 p-8 text-center transition-all hover:border-blue-500/40 hover:bg-blue-500/5 cursor-pointer group">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-500/20 bg-blue-500/10 transition-transform group-hover:scale-110">
-                    <Plus className="h-7 w-7 text-blue-400" />
+                <div className="flex min-h-64 flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-slate-200 bg-white p-8 text-center transition-all hover:border-blue-300 hover:bg-blue-50/50 cursor-pointer group shadow-sm">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-100 bg-blue-50 transition-transform group-hover:scale-110">
+                    <Plus className="h-7 w-7 text-blue-500" />
                   </div>
                   <div>
-                    <p className="font-semibold text-white">New Trip</p>
+                    <p className="font-semibold text-slate-900">New Trip</p>
                     <p className="mt-1 text-sm text-slate-500">Plan with AI</p>
+                  </div>
+                </div>
+              </Link>
+            </motion.div>
+
+            {/* Surprise Me card */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: (trips.length + 1) * 0.04 }}
+            >
+              <Link href="/explore">
+                <div className="flex min-h-64 flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-slate-200 bg-white p-8 text-center transition-all hover:border-violet-300 hover:bg-violet-50/50 cursor-pointer group shadow-sm">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-violet-100 bg-violet-50 transition-transform group-hover:scale-110">
+                    <TrendingUp className="h-7 w-7 text-violet-500" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900">Explore Trips</p>
+                    <p className="mt-1 text-sm text-slate-500">Browse community</p>
                   </div>
                 </div>
               </Link>
             </motion.div>
           </div>
         )}
+      </div>
+
+      {/* ── Floating AI Assistant ── */}
+      <div className="fixed bottom-6 right-6 z-50">
+        <Link href="/trip/new">
+          <motion.button
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.8, type: "spring", bounce: 0.4 }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-4 py-3 text-sm font-semibold text-white shadow-xl shadow-blue-500/30 transition-shadow hover:shadow-2xl hover:shadow-blue-500/40"
+          >
+            <Sparkles className="h-4 w-4" />
+            AI Assistant
+          </motion.button>
+        </Link>
       </div>
     </div>
   );

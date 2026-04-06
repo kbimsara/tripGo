@@ -32,11 +32,11 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       secondary:
         "bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 text-white shadow-lg hover:shadow-orange-500/25",
       ghost:
-        "bg-white/5 hover:bg-white/10 text-white border border-white/10 hover:border-white/20",
+        "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 hover:border-slate-300",
       danger:
         "bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white",
       outline:
-        "border-2 border-blue-500 text-blue-400 hover:bg-blue-500/10 hover:text-blue-300",
+        "border-2 border-blue-500 text-blue-600 hover:bg-blue-50 hover:text-blue-700",
     };
 
     const sizes = {
