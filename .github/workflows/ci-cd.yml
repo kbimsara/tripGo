@@ -1,0 +1,178 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  TripGo — CI/CD Pipeline
+#
+#  Jobs:
+#    lint          → ESLint on every push / PR
+#    typecheck     → TypeScript check on every push / PR
+#    deploy-preview → Vercel preview URL posted as PR comment
+#    deploy-prod   → Vercel production deploy on push to main/master
+#
+#  Required GitHub Secrets (Settings → Secrets → Actions):
+#    VERCEL_TOKEN       — from vercel.com/account/tokens
+#    VERCEL_ORG_ID      — from .vercel/project.json after `vercel link`
+#    VERCEL_PROJECT_ID  — from .vercel/project.json after `vercel link`
+#
+#  Required Vercel Environment Variables (set in Vercel dashboard):
+#    MONGODB_URI, NEXTAUTH_SECRET, NEXTAUTH_URL,
+#    OPENROUTER_API_KEY, OPENROUTER_MODEL
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ─── Job 1: ESLint ───────────────────────────────────────────────────────────
+jobs:
+  lint:
+    name: ESLint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+# ─── Job 2: TypeScript type check ────────────────────────────────────────────
+  typecheck:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript type check
+        run: npx tsc --noEmit
+
+# ─── Job 3: Deploy Preview (PRs only) ────────────────────────────────────────
+  deploy-preview:
+    name: Deploy Preview
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck]
+    if: github.event_name == 'pull_request'
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel preview environment
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build preview
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy preview to Vercel
+        id: deploy
+        run: |
+          url=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          echo "preview_url=$url" >> $GITHUB_OUTPUT
+
+      - name: Comment preview URL on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = '${{ steps.deploy.outputs.preview_url }}';
+            const sha  = context.payload.pull_request.head.sha.slice(0, 7);
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner:        context.repo.owner,
+              repo:         context.repo.repo,
+              body: [
+                '## 🚀 Preview Deployment',
+                '',
+                `| | |`,
+                `|---|---|`,
+                `| **URL** | ${url} |`,
+                `| **Commit** | \`${sha}\` |`,
+                `| **Status** | ✅ Ready |`,
+                '',
+                '_This preview will be updated on every new commit to this PR._',
+              ].join('\n'),
+            });
+
+# ─── Job 4: Deploy Production (main / master push only) ──────────────────────
+  deploy-prod:
+    name: Deploy Production
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck]
+    if: >
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel production environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build for production
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to Vercel production
+        id: deploy
+        run: |
+          url=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          echo "production_url=$url" >> $GITHUB_OUTPUT
+
+      - name: Print deployment URL
+        run: |
+          echo "✅ Deployed to production: ${{ steps.deploy.outputs.production_url }}"
