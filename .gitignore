@@ -1,16 +1,16 @@
-# ── Dependencies ────────────────────────────────────────────────────────
+# ── Dependencies ─────────────────────────────────────────────────────────────
 node_modules/
 .pnp
 .pnp.js
 .yarn/install-state.gz
 
-# ── Next.js build output ────────────────────────────────────────────────
+# ── Next.js build output ──────────────────────────────────────────────────────
 .next/
 out/
 build/
 dist/
 
-# ── Environment & secrets (NEVER commit these) ──────────────────────────
+# ── Environment & secrets (NEVER commit these) ────────────────────────────────
 .env
 .env.local
 .env.development
@@ -19,16 +19,24 @@ dist/
 .env.test.local
 .env.production
 .env.production.local
+# .env.example is intentionally NOT ignored (it's a safe template)
 
-# ── Testing & coverage ──────────────────────────────────────────────────
-/coverage
-.nyc_output
+# ── Vercel ────────────────────────────────────────────────────────────────────
+.vercel
 
-# ── TypeScript ──────────────────────────────────────────────────────────
+# ── TypeScript ────────────────────────────────────────────────────────────────
 *.tsbuildinfo
 next-env.d.ts
 
-# ── OS generated ────────────────────────────────────────────────────────
+# ── Logs ──────────────────────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── OS generated ──────────────────────────────────────────────────────────────
 .DS_Store
 .DS_Store?
 ._*
@@ -38,16 +46,7 @@ ehthumbs.db
 Thumbs.db
 desktop.ini
 
-# ── Logs ────────────────────────────────────────────────────────────────
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-# ── Editor / IDE ────────────────────────────────────────────────────────
+# ── Editor / IDE ──────────────────────────────────────────────────────────────
 .idea/
 .vscode/
 *.swp
@@ -58,64 +57,41 @@ lerna-debug.log*
 *.sln
 *.sw?
 
-# ── Package manager locks (keep only one) ───────────────────────────────
-# Uncomment the ones you DON'T use:
-# package-lock.json
-# yarn.lock
-# pnpm-lock.yaml
-
-# ── Vercel ──────────────────────────────────────────────────────────────
-.vercel
-
-# ── Misc certs & keys ───────────────────────────────────────────────────
+# ── Certs & keys ──────────────────────────────────────────────────────────────
 *.pem
 *.key
 *.crt
 *.p12
 
-# ── Debug / profiling ───────────────────────────────────────────────────
+# ── Coverage & profiling ──────────────────────────────────────────────────────
+/coverage
+.nyc_output
 .clinic/
 .0x/
 *.cpuprofile
 *.heapsnapshot
 
-# ── Local DB data (if running MongoDB locally with data dir) ────────────
+# ── MongoDB local data ────────────────────────────────────────────────────────
 data/db/
 mongo-data/
 
-# ── Claude Code settings ────────────────────────────────────────────────
-.claude/settings.local.json
+# ── Ollama model files ────────────────────────────────────────────────────────
+*.gguf
+*.ggml
+ollama-data/
 
-# ── Temp / cache ────────────────────────────────────────────────────────
+# ── Temp / cache ──────────────────────────────────────────────────────────────
 .cache/
 .temp/
 .tmp/
 tmp/
 temp/
 
-# ── Ollama (in case any model files end up in repo) ─────────────────────
-*.gguf
-*.ggml
-*.bin
-ollama-data/
-
-# ── User-uploaded images (if stored locally) ────────────────────────────
+# ── Uploads (user-generated content stored locally) ──────────────────────────
 public/uploads/
 
-# ── Storybook ────────────────────────────────────────────────────────────
-storybook-static/
-
-# ── Sentry ───────────────────────────────────────────────────────────────
-.sentryclirc
-
-# ── Playwright / Cypress test artifacts ─────────────────────────────────
-/test-results/
-/playwright-report/
-/playwright/.cache/
-cypress/videos/
-cypress/screenshots/
-
-# ── Misc backup files ────────────────────────────────────────────────────
+# ── Misc backup files ─────────────────────────────────────────────────────────
 *.bak
 *.orig
 *~
+
