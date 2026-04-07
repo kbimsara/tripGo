@@ -460,7 +460,7 @@ export default function HomePage() {
 
             <p className="text-xs text-slate-400">
               Maps by <span className="text-slate-600">OpenStreetMap</span> ·{" "}
-              AI by <span className="text-slate-600">Anthropic Claude</span> ·{" "}
+              AI by <span className="text-slate-600"></span> ·{" "}
               © {new Date().getFullYear()} TripGo
             </p>
           </div>
