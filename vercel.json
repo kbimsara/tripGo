@@ -5,7 +5,7 @@
   "devCommand": "npm run dev",
   "regions": ["sin1"],
   "env": {
-    "NEXTAUTH_URL": "https://your-project.vercel.app"
+    "NEXTAUTH_URL": "https://trip-go-red.vercel.app"
   },
   "headers": [
     {
