@@ -125,7 +125,7 @@ OLLAMA_MODEL=qwen2.5:7b
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) 🎉
+Open [http://localhost:3000](http://localhost:3000) 
 
 ### 4. Create Your First Account
 
