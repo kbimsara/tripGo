@@ -149,7 +149,7 @@ export default function Navbar() {
                       <div className="mx-3 border-t border-slate-100" />
 
                       <button
-                        onClick={() => { setUserMenuOpen(false); signOut({ callbackUrl: "/" }); }}
+                        onClick={() => { setUserMenuOpen(false); signOut({ callbackUrl: window.location.origin }); }}
                         className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-500 transition-colors hover:bg-red-50"
                       >
                         <LogOut className="h-4 w-4" />
@@ -242,7 +242,7 @@ export default function Navbar() {
                       Dashboard
                     </Link>
                     <button
-                      onClick={() => signOut({ callbackUrl: "/" })}
+                      onClick={() => signOut({ callbackUrl: window.location.origin })}
                       className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors"
                     >
                       <LogOut className="h-4 w-4" />
