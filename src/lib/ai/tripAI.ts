@@ -79,7 +79,15 @@ STRICT RULES:
 9. Each place description should be 2-3 sentences explaining what makes it special
 10. routes MUST connect consecutive places in order
 11. Return ONLY the JSON object — absolutely no text before or after it
-12. All string values must be properly escaped — no unescaped quotes or newlines`;
+12. All string values must be properly escaped — no unescaped quotes or newlines
+
+GEOGRAPHIC CLUSTERING RULES (CRITICAL — violations will break the map):
+13. ALL places MUST be physically located INSIDE the specified destination city or its immediate surroundings (within ~20 km). NEVER include places from other cities, regions, or countries unless the trip explicitly lists multiple destinations.
+14. Each day's places MUST be geographically clustered in the SAME neighborhood or district — think of it as a walkable/short-drive loop. A tourist should be able to visit all places in one day without crossing the entire country.
+15. Maximum total route distance per day: 30 km for city trips, 100 km for country/island trips.
+16. For multi-day trips to a single city: vary the NEIGHBORHOOD each day (e.g. Day 1 = Old Town, Day 2 = Waterfront, Day 3 = Suburbs) — all still within the same city.
+17. For country-level destinations (e.g. "Sri Lanka", "Japan"): assign each day to a SINGLE region or city within that country and keep all that day's places inside that region. Do NOT mix places from distant regions in the same day.
+18. NEVER pick a famous landmark from a completely different country just because it sounds related. If the destination is Colombo, Sri Lanka — every single place must be in or near Colombo.`;
 
 // ── LLM caller — routes to Claude → OpenRouter → Ollama ─────────────────────
 async function llmChat(
@@ -307,26 +315,107 @@ async function geocode(query: string): Promise<[number, number] | null> {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// ── Haversine distance (km) between two [lat,lng] pairs ──────────────────────
+function haversineKm(a: [number, number], b: [number, number]): number {
+  const R = 6371;
+  const dLat = ((b[0] - a[0]) * Math.PI) / 180;
+  const dLng = ((b[1] - a[1]) * Math.PI) / 180;
+  const lat1 = (a[0] * Math.PI) / 180;
+  const lat2 = (b[0] * Math.PI) / 180;
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.asin(Math.sqrt(h));
+}
+
+// ── Look up destination center + bounding box via Nominatim ─────────────────
+interface DestinationBounds {
+  center: [number, number];
+  /** Radius in km that covers the destination's bounding box */
+  radiusKm: number;
+}
+
+async function getDestinationBounds(
+  destination: string
+): Promise<DestinationBounds | null> {
+  try {
+    const url =
+      "https://nominatim.openstreetmap.org/search?" +
+      new URLSearchParams({ q: destination, format: "json", limit: "1" });
+
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "TripGo/1.0 (https://github.com/kbimsara/tripGo)",
+        "Accept-Language": "en",
+      },
+      signal: AbortSignal.timeout(6_000),
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data) || !data.length) return null;
+
+    const item = data[0];
+    const lat = parseFloat(item.lat);
+    const lng = parseFloat(item.lon);
+    if (!isValidCoord([lat, lng])) return null;
+
+    // Nominatim returns boundingbox as [minLat, maxLat, minLng, maxLng] strings
+    const bb: number[] = (item.boundingbox ?? []).map(Number);
+    let radiusKm = 50; // default fallback
+    if (bb.length === 4) {
+      const [minLat, maxLat, minLng, maxLng] = bb;
+      // Half-diagonal of the bounding box as the max allowed radius
+      const corner: [number, number] = [minLat, minLng];
+      const opposite: [number, number] = [maxLat, maxLng];
+      radiusKm = haversineKm(corner, opposite) / 2;
+      // Clamp: city ≥ 15 km, country-level ≤ 600 km
+      radiusKm = Math.max(15, Math.min(radiusKm, 600));
+    }
+
+    return { center: [lat, lng], radiusKm };
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Fix every place's coordinates using Nominatim.
- * Strategy (tries each in order until a valid coord is found):
+ * Fix every place's coordinates using Nominatim, then validate each result
+ * is geographically close to the destination (snaps strays back to dest center).
+ *
+ * Strategy per place (tries each in order until a valid coord is found):
  *   1. name + full address  (most specific)
- *   2. name + each destination  (tries all, not just first — fixes multi-city trips)
+ *   2. name + each destination  (tries all — fixes multi-city trips)
  *   3. name alone
- *   4. Keep LLM coordinates if they look valid
+ *   4. Keep LLM coordinates if they look valid AND are near the destination
  *   5. Fall back to each destination city center in turn
+ *
+ * After geocoding, any place whose coordinates land more than
+ * (destBounds.radiusKm * 1.5) away from the nearest destination center is
+ * snapped to that destination center so it doesn't break the map route.
  */
 async function geocodePlaces(
   places: Place[],
-  destinations: string[]
+  destinations: string[],
+  destBoundsMap: Map<string, DestinationBounds>
 ): Promise<Place[]> {
+  // Helper: find the closest destination center to a coord
+  const nearestDest = (coord: [number, number]): { center: [number, number]; radiusKm: number } | null => {
+    let best: { center: [number, number]; radiusKm: number } | null = null;
+    let bestDist = Infinity;
+    for (const bounds of destBoundsMap.values()) {
+      const d = haversineKm(coord, bounds.center);
+      if (d < bestDist) { bestDist = d; best = bounds; }
+    }
+    return best;
+  };
+
   const fixed: Place[] = [];
 
   for (const place of places) {
     let coord: [number, number] | null = null;
 
     // Build search queries from most to least specific.
-    // Try every destination as context — critical for multi-destination trips
     const queries: string[] = [];
     if (place.address && place.address.length > 4)
       queries.push(`${place.name}, ${place.address}`);
@@ -335,22 +424,36 @@ async function geocodePlaces(
     queries.push(place.name);
 
     for (const q of queries) {
-      coord = await geocode(q);
+      const candidate = await geocode(q);
       await sleep(1_100);
-      if (coord) break;
+      if (!candidate) continue;
+
+      // Accept this geocode result only if it's within the destination area
+      const nearest = nearestDest(candidate);
+      if (!nearest || haversineKm(candidate, nearest.center) <= nearest.radiusKm * 1.5) {
+        coord = candidate;
+        break;
+      }
+      // Result is too far — try the next query
+      console.warn(`[TripGo] "${place.name}" geocoded far from destination (${Math.round(haversineKm(candidate, nearest!.center))} km) — trying next query`);
     }
 
-    // If Nominatim failed, trust the LLM coord only if it passes validation
+    // If Nominatim failed/was out-of-bounds, trust the LLM coord only if near destination
     if (!coord && isValidCoord(place.coordinates)) {
-      coord = place.coordinates;
+      const nearest = nearestDest(place.coordinates as [number, number]);
+      if (!nearest || haversineKm(place.coordinates as [number, number], nearest.center) <= nearest.radiusKm * 1.5) {
+        coord = place.coordinates as [number, number];
+      }
     }
 
-    // Last resort: geocode each destination until one succeeds
+    // Last resort: snap to the nearest destination center
     if (!coord) {
       for (const dest of destinations) {
-        coord = await geocode(dest);
+        const bounds = destBoundsMap.get(dest);
+        if (bounds) { coord = bounds.center; break; }
+        const fallback = await geocode(dest);
         await sleep(1_100);
-        if (coord) break;
+        if (fallback) { coord = fallback; break; }
       }
     }
 
@@ -396,8 +499,11 @@ export async function generateTripPlan(formData: TripFormData): Promise<Trip> {
   // Scale token budget: ~1500 tokens per day of trip
   const maxTokens = Math.min(Math.max(formData.days * 1500, 4096), 16384);
 
+  const destList = formData.destinations.join(", ");
+  const isSingleDest = formData.destinations.length === 1;
+
   const prompt =
-    `Create a ${formData.days}-day trip itinerary for: ${formData.destinations.join(", ")}
+    `Create a ${formData.days}-day trip itinerary for: ${destList}
 
 Budget: ${formData.budget}
 Interests: ${(formData.interests ?? []).join(", ") || "general sightseeing"}
@@ -412,6 +518,17 @@ IMPORTANT REQUIREMENTS:
 - Coordinates should be as accurate as possible (they will be verified)
 - Include practical, specific tips for each place (opening hours, best time to visit, what to order, etc.)
 - Routes should use realistic travel modes: walking for <2km, driving for >5km
+
+⚠️  GEOGRAPHIC CONSTRAINT — THIS IS THE MOST IMPORTANT RULE:
+${isSingleDest
+  ? `ALL places must be physically located INSIDE "${destList}" — every single place, every single day.
+- Do NOT include places from other cities or countries.
+- Keep each day's places in the same neighborhood (within 5–15 km of each other).
+- Vary the district each day (e.g. Day 1 = city centre, Day 2 = coastal area) but stay within "${destList}".`
+  : `Assign each day to ONE of the destinations: ${destList}.
+- All places on a given day must be in that day's assigned destination city.
+- Do NOT mix places from different destinations on the same day.
+- Keep each day's places within 20 km of each other.`}
 
 Return ONLY the JSON object — no commentary, no markdown fences.`;
 
@@ -458,13 +575,27 @@ Return ONLY the JSON object — no commentary, no markdown fences.`;
   // Sanitize the trip data
   trip = sanitizeTrip(trip!, formData);
 
-  // Fix coordinates with Nominatim geocoding
+  // ── Pre-fetch destination centers (used to validate geocoded coords) ─────
+  console.log(`[TripGo] Resolving destination bounds for: ${formData.destinations.join(", ")}`);
+  const destBoundsMap = new Map<string, DestinationBounds>();
+  for (const dest of formData.destinations) {
+    const bounds = await getDestinationBounds(dest);
+    await sleep(1_100); // respect Nominatim rate limit
+    if (bounds) {
+      destBoundsMap.set(dest, bounds);
+      console.log(`[TripGo]  → "${dest}" center=${bounds.center} radius=${Math.round(bounds.radiusKm)} km`);
+    } else {
+      console.warn(`[TripGo]  → "${dest}" bounds lookup failed — will skip distance validation`);
+    }
+  }
+
+  // ── Fix coordinates with Nominatim + bounds validation ───────────────────
   console.log(`[TripGo] Geocoding coordinates for ${trip.days?.length ?? 0} days…`);
 
   if (Array.isArray(trip.days)) {
     for (const day of trip.days) {
       if (Array.isArray(day.places) && day.places.length > 0) {
-        day.places = await geocodePlaces(day.places, formData.destinations);
+        day.places = await geocodePlaces(day.places, formData.destinations, destBoundsMap);
       }
     }
   }
@@ -562,13 +693,22 @@ I've added the Tsukiji Outer Market as a morning food stop on Day 2!
 
       // Fix coordinates on any newly added / changed places
       if (Array.isArray(updatedTrip.days) && trip.destinations) {
+        // Build a best-effort bounds map for the chat context (no rate-limit
+        // delay needed here — we accept imprecision for chat updates)
+        const chatBoundsMap = new Map<string, DestinationBounds>();
+        for (const dest of trip.destinations) {
+          const bounds = await getDestinationBounds(dest);
+          await sleep(1_100);
+          if (bounds) chatBoundsMap.set(dest, bounds);
+        }
+
         for (const day of updatedTrip.days) {
           if (!Array.isArray(day.places)) continue;
 
           // Only geocode places whose coordinates look wrong
           const needsGeocode = day.places.filter((p) => !isValidCoord(p.coordinates));
           if (needsGeocode.length > 0) {
-            const fixed = await geocodePlaces(needsGeocode, trip.destinations);
+            const fixed = await geocodePlaces(needsGeocode, trip.destinations, chatBoundsMap);
             const fixedMap = Object.fromEntries(fixed.map((p) => [p.id, p]));
             day.places = day.places.map((p) => fixedMap[p.id] ?? p);
           }

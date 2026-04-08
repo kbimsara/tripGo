@@ -139,6 +139,8 @@ export default function TripMap({ trip, selectedDay, onPlaceSelect, className = 
   const markerLayer   = useRef<L.LayerGroup | null>(null);
   const routeLayer    = useRef<L.LayerGroup | null>(null);
   const resizeObserver = useRef<ResizeObserver | null>(null);
+  // Incremented on every renderMap call so stale async continuations can self-cancel
+  const renderTokenRef = useRef(0);
 
   const [isClient, setIsClient]       = useState(false);
   const [mapReady, setMapReady]       = useState(false);
@@ -210,6 +212,8 @@ export default function TripMap({ trip, selectedDay, onPlaceSelect, className = 
   // ── Render markers & routes when trip/day changes ──────────────────
   const renderMap = useCallback(async () => {
     if (!isClient || !mapReady || !leafletMap.current || !markerLayer.current) return;
+    // Capture a token so we can bail if a newer renderMap call starts while we await
+    const myToken = ++renderTokenRef.current;
 
     const L = (await import("leaflet")).default;
     markerLayer.current!.clearLayers();
@@ -350,6 +354,13 @@ export default function TripMap({ trip, selectedDay, onPlaceSelect, className = 
             )
           );
 
+          // If the map was destroyed or a newer render started while we were
+          // awaiting OSRM, discard this stale result and bail out.
+          if (myToken !== renderTokenRef.current || !routeLayer.current || !leafletMap.current) {
+            setRouteLoading(false);
+            return;
+          }
+
           for (let i = 0; i < pairs.length; i++) {
             const seg = results[i];
             const { fromPlace, toPlace } = pairs[i];
@@ -407,10 +418,10 @@ export default function TripMap({ trip, selectedDay, onPlaceSelect, className = 
     setRouteLoading(false);
     if (newSegments.length) setRouteSegments(newSegments);
 
-    // Fit bounds
+    // Fit bounds — use ?. in case the map was torn down between the last await and here
     if (allBounds.length > 0) {
       const bounds = L.latLngBounds(allBounds);
-      leafletMap.current!.fitBounds(bounds, { padding: [50, 50] });
+      leafletMap.current?.fitBounds(bounds, { padding: [50, 50] });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trip, selectedDay, isClient, mapReady, onPlaceSelect, routeMode]);

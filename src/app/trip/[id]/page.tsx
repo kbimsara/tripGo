@@ -103,6 +103,12 @@ export default function TripPage({
   const { toast } = useToast();
   const isOwner = session?.user?.id && trip?.owner?._id === session.user.id;
 
+  // If the active tab is removed from NAV_TABS (e.g. isOwner flips), fall back
+  // to itinerary so the content panel never goes blank.
+  useEffect(() => {
+    if (tab === "chat" && !isOwner) setTab("itinerary");
+  }, [isOwner, tab]);
+
   useEffect(() => {
     const fetchTrip = async () => {
       try {
@@ -183,7 +189,15 @@ export default function TripPage({
   };
 
   const handleTripUpdate = (updatedTrip: Partial<Trip>) => {
-    setTrip((prev) => prev ? { ...prev, ...updatedTrip } : prev);
+    setTrip((prev) => {
+      if (!prev) return prev;
+      // The chat API returns `owner` as a raw ObjectId string (not populated).
+      // Merging it would overwrite the { _id, name } object and break isOwner,
+      // causing the chat tab to vanish and the content panel to go blank.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { owner: _discardOwner, ...safeUpdate } = updatedTrip as Trip;
+      return { ...prev, ...safeUpdate };
+    });
   };
 
   const shareTrip = () => {

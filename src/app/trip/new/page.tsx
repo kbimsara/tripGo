@@ -137,7 +137,7 @@ export default function NewTripPage() {
         <h2 className="font-display mb-2 text-2xl font-bold text-slate-900">
           Designing Your Trip
         </h2>
-        <p className="mb-8 text-slate-500">Claude AI is crafting your perfect itinerary…</p>
+        <p className="mb-8 text-slate-500">TripGo AI is crafting your perfect itinerary…</p>
         <div className="flex flex-col items-start gap-2 text-sm text-slate-400">
           {["Finding best attractions…", "Planning optimal routes…", "Discovering hidden gems…", "Adding local tips…"].map((msg, i) => (
             <motion.div key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 2 }} className="flex items-center gap-2">
@@ -164,7 +164,7 @@ export default function NewTripPage() {
           <h1 className="font-display mb-2 text-4xl font-bold text-slate-900">
             Plan Your Perfect Trip
           </h1>
-          <p className="text-slate-500">Tell Claude AI about your dream trip</p>
+          <p className="text-slate-500">Tell TripGo AI about your dream trip</p>
         </motion.div>
 
         {/* Sign-in nudge */}
@@ -330,7 +330,7 @@ export default function NewTripPage() {
             </Button>
 
             <p className="text-center text-xs text-slate-400">
-              Claude AI creates a complete itinerary with GPS routes, viewpoints, and local tips
+              TripGo AI creates a complete itinerary with GPS routes, viewpoints, and local tips
             </p>
           </div>
         </motion.div>

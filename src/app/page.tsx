@@ -33,7 +33,7 @@ const FEATURES = [
     icon: <Sparkles className="w-5 h-5" />,
     label: "AI Trip Designer",
     title: "Describe your dream trip — AI handles the rest",
-    desc: "Claude generates day-by-day itineraries with real GPS coordinates, restaurant picks, hidden viewpoints, and local tips tailored to your budget.",
+    desc: "TripGo AI generates day-by-day itineraries with real GPS coordinates, restaurant picks, hidden viewpoints, and local tips tailored to your budget.",
     color: "text-blue-600",
     bg: "bg-blue-50 border-blue-100",
     wide: true,
@@ -76,7 +76,7 @@ const STEPS = [
   {
     n: "02", color: "text-violet-500", bg: "bg-violet-50 border-violet-100",
     title: "Get a full itinerary instantly",
-    desc: "Claude builds a day-by-day plan with real GPS pins, restaurant picks, viewpoints, and driving routes.",
+    desc: "TripGo AI builds a day-by-day plan with real GPS pins, restaurant picks, viewpoints, and driving routes.",
   },
   {
     n: "03", color: "text-orange-500", bg: "bg-orange-50 border-orange-100",
@@ -257,7 +257,7 @@ export default function HomePage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-slate-100 rounded-2xl overflow-hidden border border-slate-100">
             {[
               { value: "100%", label: "Free maps & routing" },
-              { value: "Claude", label: "AI-powered plans" },
+              { value: "AI",     label: "AI-powered plans" },
               { value: "OSRM",   label: "Real road navigation" },
               { value: "OSM",    label: "OpenStreetMap data" },
             ].map((s, i) => (
@@ -460,7 +460,7 @@ export default function HomePage() {
 
             <p className="text-xs text-slate-400">
               Maps by <span className="text-slate-600">OpenStreetMap</span> ·{" "}
-              AI by <span className="text-slate-600">qwen3.6-plus</span> ·{" "}
+              AI by <span className="text-slate-600">gpt</span> ·{" "}
               © {new Date().getFullYear()} TripGo
             </p>
           </div>

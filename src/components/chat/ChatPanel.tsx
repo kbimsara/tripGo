@@ -248,7 +248,7 @@ export default function ChatPanel({
           </Button>
         </div>
         <p className="text-xs text-slate-400 text-center mt-1.5">
-          Powered by Claude AI · Enter to send
+          Powered by TripGo AI · Enter to send
         </p>
       </div>
     </div>

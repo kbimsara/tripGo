@@ -6,7 +6,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript)
 ![MongoDB](https://img.shields.io/badge/MongoDB-9-47A248?style=for-the-badge&logo=mongodb)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=for-the-badge&logo=tailwindcss)
-![OpenRouter](https://img.shields.io/badge/OpenRouter-Qwen3-7C3AED?style=for-the-badge&logo=openai)
+![OpenRouter](https://img.shields.io/badge/OpenRouter-Free_Tier-7C3AED?style=for-the-badge&logo=openai)
 ![OpenStreetMap](https://img.shields.io/badge/OpenStreetMap-Free_Maps-7EBC6F?style=for-the-badge&logo=openstreetmap)
 
 **Plan the perfect trip with AI. Visualize on a live map. Share with the world.**
@@ -21,11 +21,12 @@
 
 | Feature | Description |
 |---|---|
-| 🤖 **AI Trip Designer** | Claude, OpenRouter (Qwen3), or local Ollama generates complete day-by-day itineraries with real GPS coordinates, viewpoints, restaurants, and travel tips |
+| 🤖 **AI Trip Designer** | Claude, OpenRouter, or local Ollama generates complete day-by-day itineraries with real GPS coordinates, viewpoints, restaurants, and travel tips |
+| 📍 **Geographic Accuracy** | Destination-bounds validation ensures all AI-generated places stay within the correct city/region — no more pins scattered across wrong countries |
 | 🗺️ **Interactive Map** | Live OpenStreetMap with real **road routing** via OSRM — 100% free, no API key needed |
 | 🚗 **Turn-by-Turn Directions** | Actual road paths between stops with distance and drive-time labels. One-click open in Google Maps |
-| 📍 **Accurate Geocoding** | All AI-generated place names are verified and corrected via **Nominatim** (OSM) with country-filtered lookups |
-| 🧠 **Think-Tag Stripping** | Automatically strips `<think>...</think>` reasoning blocks from models like Qwen3 before parsing |
+| 🔍 **Accurate Geocoding** | All AI-generated place names verified and corrected via **Nominatim** (OSM) with bounding-box filtering |
+| 🧠 **Think-Tag Stripping** | Automatically strips `<think>...</think>` reasoning blocks from models like Qwen3 before JSON parsing |
 | ⚡ **Rate Limit Retry** | Exponential backoff (8 s → 16 s → 32 s → 64 s) for OpenRouter 429 errors |
 | 💬 **AI Chat to Customize** | Refine your itinerary through natural conversation — swap places, add viewpoints, change routes |
 | 💾 **Save & Account** | Trips saved to MongoDB under your account. Public or private per trip |
@@ -50,13 +51,15 @@
 - **NextAuth v5** — credentials provider, JWT strategy
 - **Zustand + SWR** — client-side state and data fetching
 
-### AI Providers (choose one or more)
+### AI Providers (choose one)
 
 | Provider | Model | Free? |
 |---|---|---|
-| **OpenRouter** ⭐ | `qwen/qwen3.6-plus:free` | ✅ Free tier |
-| **Anthropic Claude** | `claude-3-5-sonnet` | 💳 Paid |
+| **OpenRouter** ⭐ | `openai/gpt-oss-120b:free` | ✅ Free tier |
+| **Anthropic Claude** | `claude-sonnet-4-20250514` | 💳 Paid |
 | **Ollama** | Any local model | ✅ Completely free |
+
+**Priority order:** Claude → OpenRouter → Ollama (first configured variable wins)
 
 ### Free Services Used
 
@@ -64,8 +67,8 @@
 |---|---|---|
 | OpenStreetMap / CartoDB | Dark map tiles | Free forever |
 | OSRM | Real road routing between places | Free forever |
-| Nominatim | Place name → verified GPS coordinates | Free forever |
-| OpenRouter free tier | Qwen3 AI generation & chat | Free (rate limited) |
+| Nominatim | Place name → verified GPS + bounding box | Free forever |
+| OpenRouter free tier | AI generation & chat | Free (rate limited) |
 | MongoDB (local) | Trip and user storage | Free |
 
 ---
@@ -99,13 +102,14 @@ MONGODB_URI=mongodb://localhost:27017/tripgo
 # ── Auth ──────────────────────────────────────────────────
 # Generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 NEXTAUTH_SECRET=your-random-secret-minimum-32-characters
+AUTH_SECRET=your-random-secret-minimum-32-characters   # same value — required by NextAuth v5
 NEXTAUTH_URL=http://localhost:3000
 
-# ── AI Provider — pick ONE (or more, priority order below) ──
+# ── AI Provider — pick ONE (priority: Claude → OpenRouter → Ollama) ──
 
-# Option A: OpenRouter — free Qwen3 model (recommended for zero cost)
+# Option A: OpenRouter — free tier (recommended for zero cost)
 OPENROUTER_API_KEY=sk-or-v1-...
-OPENROUTER_MODEL=qwen/qwen3.6-plus:free
+OPENROUTER_MODEL=openai/gpt-oss-120b:free
 
 # Option B: Anthropic Claude (cloud)
 ANTHROPIC_API_KEY=sk-ant-...
@@ -114,8 +118,6 @@ ANTHROPIC_API_KEY=sk-ant-...
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=qwen2.5:7b
 ```
-
-**Priority order:** Claude → OpenRouter → Ollama (first set variable wins)
 
 ### 3. Run the Dev Server
 
@@ -141,14 +143,21 @@ Get a free API key at **[openrouter.ai](https://openrouter.ai)**:
 
 ```env
 OPENROUTER_API_KEY=sk-or-v1-...
-OPENROUTER_MODEL=qwen/qwen3.6-plus:free
+OPENROUTER_MODEL=openai/gpt-oss-120b:free
 ```
 
-**Qwen3** is a reasoning model that emits `<think>...</think>` blocks before the JSON output.
-TripGo automatically strips these before parsing, so you get clean itineraries every time.
+`openai/gpt-oss-120b:free` is the recommended free model — 120B parameters, 131K context window, reliable structured JSON output.
 
 Free-tier rate limits are handled with automatic **exponential backoff retry**:
 `8 s → 16 s → 32 s → 64 s` (up to 4 retries per request)
+
+Other tested free models:
+
+| Model | Notes |
+|---|---|
+| `openai/gpt-oss-120b:free` ⭐ | Recommended — large, reliable JSON |
+| `google/gemma-4-31b-it:free` | Good alternative, 262K context |
+| `qwen/qwen3-235b-a22b:free` | Reasoning model; emits `<think>` tags (stripped automatically) |
 
 ### Option B — Anthropic Claude
 
@@ -156,7 +165,7 @@ Free-tier rate limits are handled with automatic **exponential backoff retry**:
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-Uses `claude-3-5-sonnet-20241022` by default. Best quality, paid per token.
+Uses `claude-sonnet-4-20250514` by default. Best quality, paid per token.
 
 ### Option C — Ollama (Fully Offline · Free)
 
@@ -194,7 +203,7 @@ TripGo uses **100% free** mapping services — no API keys required.
 |---|---|---|
 | **CartoDB Dark** | `basemaps.cartocdn.com/dark_all` | Map tiles |
 | **OSRM** | `router.project-osrm.org` | Real road routing |
-| **Nominatim** | `nominatim.openstreetmap.org` | Place name → verified GPS |
+| **Nominatim** | `nominatim.openstreetmap.org` | Place name → GPS + bounding box |
 
 ### How Road Routing Works
 
@@ -207,23 +216,38 @@ Place A ──► OSRM API ──► Real road geometry ──► Leaflet polyli
 
 ### Geocoding & Coordinate Validation
 
-AI models (especially local/free ones) frequently **hallucinate GPS coordinates** — putting a Sri Lanka temple in the UK, or a restaurant in the Caribbean. TripGo fixes this with a two-step pipeline:
+AI models frequently **hallucinate GPS coordinates** — placing a Colombo restaurant in Delhi, or a Sri Lanka temple in the UK. TripGo corrects this with a multi-layer pipeline:
 
 ```
 LLM output (possibly wrong coords)
         │
         ▼
-stripThinkingTags()     ← remove <think> blocks (Qwen3)
+stripThinkingTags()          ← remove <think> blocks (reasoning models)
         │
         ▼
-Nominatim geocode       ← country-filtered lookup (e.g. countrycodes=lk)
+GEOGRAPHIC CONSTRAINT prompt ← destination names injected into every request
         │
         ▼
-Outlier filter          ← median-based 30° threshold removes bad coords
+getDestinationBounds()       ← Nominatim bounding box per destination
+        │                       (half-diagonal clamped 15–600 km)
+        ▼
+Nominatim geocode            ← place name search with bounds validation
         │
         ▼
-Real GPS saved to DB    ← correct map pins every time
+haversine distance check     ← reject candidates > radius × 1.5 from destination
+        │
+        ▼
+Coordinate outlier filter    ← median-based 30° threshold removes any survivors
+        │
+        ▼
+Real GPS saved to DB         ← correct map pins every time
 ```
+
+**AI prompt-level rules** (SYSTEM_PROMPT rules 13–18) are the first line of defence:
+- All places must be within ~20 km of the destination city
+- Each day's places must be geographically clustered in the same neighbourhood
+- Max route distance: 30 km/day for city trips, 100 km/day for country trips
+- Multi-destination trips assign each day to exactly one destination
 
 **Map features:**
 - ✅ Real road paths via OSRM (not straight lines)
@@ -231,8 +255,9 @@ Real GPS saved to DB    ← correct map pins every time
 - ✅ Route summary panel with total distance and time
 - ✅ Multi-stop Google Maps link for the full day
 - ✅ Day-colored markers and polylines
-- ✅ Graceful fallback to dashed lines if OSRM is unavailable
+- ✅ Graceful fallback to dashed straight lines if OSRM is unavailable
 - ✅ ResizeObserver + `invalidateSize()` to prevent split-tile rendering bugs
+- ✅ Render-token pattern prevents `fitBounds` crash when async OSRM fetch outlasts the map lifecycle
 
 ---
 
@@ -243,12 +268,12 @@ tripGo/
 ├── src/
 │   ├── app/
 │   │   ├── (auth)/
-│   │   │   ├── login/page.tsx            # Sign-in page (light theme)
+│   │   │   ├── login/page.tsx            # Sign-in page
 │   │   │   └── register/page.tsx         # Registration page
 │   │   ├── api/
 │   │   │   ├── ai/
 │   │   │   │   ├── chat/route.ts         # In-trip AI chat refinement
-│   │   │   │   └── generate/route.ts     # Full trip plan generation
+│   │   │   │   └── generate/route.ts     # Full trip plan generation (AI only)
 │   │   │   ├── auth/
 │   │   │   │   ├── [...nextauth]/        # NextAuth handler
 │   │   │   │   └── register/route.ts    # User registration endpoint
@@ -263,11 +288,11 @@ tripGo/
 │   │   ├── trip/
 │   │   │   ├── new/page.tsx              # AI trip creation form
 │   │   │   └── [id]/page.tsx            # Trip detail — map + itinerary + chat
-│   │   ├── globals.css                   # Tailwind v4 theme + light UI tokens
+│   │   ├── globals.css                   # Tailwind v4 theme tokens
 │   │   ├── layout.tsx                    # Root layout
 │   │   └── page.tsx                      # Landing page with hero search
 │   ├── components/
-│   │   ├── chat/ChatPanel.tsx            # AI chat interface (light theme)
+│   │   ├── chat/ChatPanel.tsx            # AI chat interface
 │   │   ├── map/TripMap.tsx               # Leaflet + OSRM routing map
 │   │   ├── trip/TripCard.tsx             # Trip preview card
 │   │   └── ui/
@@ -275,9 +300,9 @@ tripGo/
 │   │       ├── Navbar.tsx                # Responsive navbar (scroll-aware)
 │   │       └── Toast.tsx                 # Toast notification system
 │   ├── lib/
-│   │   ├── ai/tripAI.ts                 # LLM integration: Claude, OpenRouter, Ollama
+│   │   ├── ai/tripAI.ts                 # LLM: Claude · OpenRouter · Ollama
 │   │   │                                #   + think-tag stripping + JSON repair
-│   │   │                                #   + Nominatim geocoding + retry logic
+│   │   │                                #   + destination bounds + haversine validation
 │   │   ├── auth.ts                      # NextAuth config (credentials + JWT)
 │   │   ├── db/mongoose.ts               # MongoDB connection pooling
 │   │   └── utils.ts                     # Shared helpers (cn, formatDate, etc.)
@@ -290,7 +315,6 @@ tripGo/
 │       └── next-auth.d.ts               # Session type extensions
 ├── .env.example                         # Template for environment variables
 ├── .env.local                           # ← Create this locally (never committed)
-├── CLAUDE.md                            # Project notes for Claude AI
 ├── next.config.ts
 ├── package.json
 └── tsconfig.json
@@ -321,11 +345,12 @@ Set these in the Vercel dashboard under **Settings → Environment Variables**:
 ```env
 MONGODB_URI=mongodb+srv://<user>:<pass>@cluster.mongodb.net/tripgo
 NEXTAUTH_SECRET=<32+ character random string>
+AUTH_SECRET=<same value as NEXTAUTH_SECRET>
 NEXTAUTH_URL=https://your-domain.vercel.app
 
 # AI — at least one required
 OPENROUTER_API_KEY=sk-or-v1-...
-OPENROUTER_MODEL=qwen/qwen3.6-plus:free
+OPENROUTER_MODEL=openai/gpt-oss-120b:free
 # or
 ANTHROPIC_API_KEY=sk-ant-...
 ```
@@ -348,25 +373,49 @@ Provider selection: Claude → OpenRouter → Ollama
 LLM response (raw text)
     │
     ▼
-stripThinkingTags()    ← remove <think>…</think> from reasoning models
+stripThinkingTags()        ← remove <think>…</think> from reasoning models
     │
     ▼
-extractJSON()          ← strip markdown fences, repair malformed JSON
+extractJSON() + repairJSON() ← strip markdown fences, fix trailing commas
     │
     ▼
-Nominatim geocoding    ← validate + fix every GPS coordinate
+getDestinationBounds()     ← Nominatim bounding box per destination
     │
     ▼
-Structured Trip object ← saved to MongoDB
+geocodePlaces()            ← validate GPS, reject stray coords via haversine
+    │
+    ▼
+Structured Trip object     ← saved to MongoDB via POST /api/trips
 ```
+
+### Two-Step Trip Creation
+
+The trip creation flow keeps AI generation and database persistence separate:
+
+1. `POST /api/ai/generate` — runs `generateTripPlan()`, returns structured JSON. No DB write. Timeout: 5 min.
+2. `POST /api/trips` — saves the trip to MongoDB with owner, saves counter, empty chat history.
+3. Frontend redirects to `/trip/[saveData.trip._id]`.
+
+### Geographic Bounds Validation
+
+For every trip generation:
+1. Each destination is looked up in Nominatim to retrieve its bounding box.
+2. The box half-diagonal is computed as the allowed radius (clamped 15–600 km).
+3. Every geocoded candidate is checked with `haversineKm()` — if it's further than `radius × 1.5` from the nearest destination, it's rejected and the next Nominatim result is tried.
+4. If all candidates fail, the place snaps to the destination centre.
+
+### Map Render-Token Race Condition
+
+`renderMap` is async and can take several seconds to await OSRM routes. If the map is torn down (component unmount, day switch) before the await resolves, `leafletMap.current` becomes `null`. Fix:
+
+- A `renderTokenRef` counter increments at the start of each `renderMap` call.
+- Each invocation captures its own `myToken`.
+- After `await Promise.all(OSRM)`, the continuation checks `myToken !== renderTokenRef.current` — stale calls bail out cleanly.
+- `fitBounds` uses optional chaining (`?.`) as a final safety net.
 
 ### Coordinate Outlier Detection
 
-Uses a **median-based** filter (not average) with a 30° threshold to detect AI-hallucinated coordinates. The median is robust to single outliers, so multi-city trips spanning continents still work correctly.
-
-### Map Race Condition Fix
-
-A `mapReady` state flag prevents the `renderMap` function from running before Leaflet's async initialization completes. A `ResizeObserver` calls `map.invalidateSize()` whenever the container resizes, preventing split tile rendering.
+Uses a **median-based** filter (not mean) with a 30° threshold to detect AI-hallucinated coordinates. The median is robust to single outliers, so multi-city trips spanning continents still work correctly.
 
 ---
 
@@ -378,7 +427,7 @@ ISC License — see [LICENSE](LICENSE) for details.
 
 <div align="center">
 
-Built with ❤️ using **Next.js · OpenRouter · Claude AI · OpenStreetMap · OSRM · Nominatim**
+Built with ❤️ using **Next.js · OpenRouter · Anthropic · OpenStreetMap · OSRM · Nominatim**
 
 **[⭐ Star this repo](https://github.com/kbimsara/tripGo)** if you found it helpful!
 

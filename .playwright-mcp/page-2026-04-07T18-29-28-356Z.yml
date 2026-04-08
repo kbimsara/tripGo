@@ -1,0 +1,62 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - navigation [ref=e3]:
+      - generic [ref=e4]:
+        - link "TripGo" [ref=e5] [cursor=pointer]:
+          - /url: /
+          - img [ref=e7]
+          - generic [ref=e10]: TripGo
+        - generic [ref=e11]:
+          - link "Explore" [ref=e12] [cursor=pointer]:
+            - /url: /explore
+            - img [ref=e14]
+            - generic [ref=e17]: Explore
+          - link "Plan Trip" [ref=e18] [cursor=pointer]:
+            - /url: /trip/new
+            - img [ref=e19]
+            - generic [ref=e21]: Plan Trip
+        - generic [ref=e22]:
+          - link "New Trip" [ref=e69] [cursor=pointer]:
+            - /url: /trip/new
+            - button "New Trip" [ref=e70]:
+              - img [ref=e71]
+              - text: New Trip
+          - button "T Test User" [ref=e73]:
+            - generic [ref=e74]: T
+            - generic [ref=e75]: Test User
+            - img [ref=e76]
+    - generic [ref=e29]:
+      - generic [ref=e30]:
+        - img [ref=e31]
+        - text: Community Trips
+      - heading "Explore Shared Trips" [level=1] [ref=e34]
+      - paragraph [ref=e35]: Discover AI-crafted itineraries shared by travelers worldwide. Save favorites or clone any trip as your own.
+      - generic [ref=e36]:
+        - img [ref=e37]
+        - textbox "Search destinations, tags..." [ref=e40]
+    - generic [ref=e41]:
+      - generic [ref=e42]:
+        - generic [ref=e43]:
+          - button "All" [ref=e44]
+          - button "cultural" [ref=e45]
+          - button "adventure" [ref=e46]
+          - button "beach" [ref=e47]
+          - button "nature" [ref=e48]
+          - button "city" [ref=e49]
+          - button "food" [ref=e50]
+          - button "history" [ref=e51]
+          - button "photography" [ref=e52]
+          - button "budget" [ref=e53]
+          - button "luxury" [ref=e54]
+          - button "family" [ref=e55]
+        - button "Most Recent" [ref=e57]:
+          - img [ref=e58]
+          - generic [ref=e59]: Most Recent
+      - generic [ref=e60]:
+        - img [ref=e79]
+        - heading "No trips found" [level=3] [ref=e82]
+        - paragraph [ref=e83]: Be the first to share a trip!
+        - button "Clear Filters" [ref=e84]
+  - button "Open Next.js Dev Tools" [ref=e90] [cursor=pointer]:
+    - img [ref=e91]
+  - alert [ref=e94]
